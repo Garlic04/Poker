@@ -3542,17 +3542,18 @@ function enterWaitingRoom(tableId, isHost) {
   // Listen to table
   let _mpGameStarted = false;
   mpTableRef = rtdb.ref('tables/' + tableId);
-  mpTableListener = mpTableRef.on('value', snap => {
+  mpTableRef.on('value', snap => {
     if (!snap.exists()) { leaveWaitingRoom(); return; }
     const data = snap.val();
     mpPlayers = data.players || {};
-    if (data.state && data.state.phase === 'playing' && !_mpGameStarted) {
-      _mpGameStarted = true;
-      mpTableRef.off(); // stop waiting room listener before starting game
-      startMPGame(data);
+    if (data.state && data.state.phase === 'playing') {
+      if (!_mpGameStarted) {
+        _mpGameStarted = true;
+        startMPGame(data);
+      }
       return;
     }
-    if (!_mpGameStarted) renderWaitingRoom(data);
+    renderWaitingRoom(data);
   });
 
   // Set up presence/disconnect
@@ -3613,12 +3614,21 @@ async function leaveWaitingRoom() {
 // ── Start multiplayer game (host triggers)
 async function startMultiplayerGame() {
   if (!mpIsHost || !mpTableId || !rtdb) return;
-  // Set phase to playing — all clients will detect this and start the game
+  document.getElementById('btn-mp-start').disabled = true;
+  document.getElementById('btn-mp-start').textContent = 'Starting...';
+
+  // Write playing state so all other clients detect and join
   await rtdb.ref('tables/' + mpTableId + '/state').update({
     phase: 'playing',
     dealerIdx: 0,
     hand: 0,
   });
+
+  // Host starts immediately with current table data
+  const snap = await rtdb.ref('tables/' + mpTableId).once('value');
+  if (snap.exists()) {
+    startMPGame(snap.val());
+  }
 }
 
 // ── Client receives game start signal
