@@ -877,14 +877,140 @@
   .achievement:hover::after {
     opacity: 1;
   }
+
+  /* ── Sign-in screen ── */
+  #signin-screen {
+    position: absolute;
+    inset: 0;
+    background: radial-gradient(ellipse 70% 50% at 50% 50%, #3a7a25 0%, #2d5a1b 60%, #1e3d10 100%);
+    z-index: 300;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 20px;
+    padding: 30px;
+  }
+  #signin-title {
+    font-size: 26px;
+    font-weight: bold;
+    color: #f4e84a;
+    text-shadow: 2px 2px 6px #000;
+    text-align: center;
+  }
+  #signin-sub {
+    font-size: 12px;
+    color: #ccc;
+    text-align: center;
+    line-height: 1.6;
+  }
+  #btn-google-signin {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    background: #fff;
+    border: none;
+    border-radius: 6px;
+    padding: 10px 20px;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: bold;
+    color: #333;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.4);
+    transition: filter 0.15s;
+  }
+  #btn-google-signin:hover { filter: brightness(0.95); }
+  #btn-google-signin img { width: 22px; height: 22px; }
+  #signin-guest {
+    font-size: 10px;
+    color: #666;
+    cursor: pointer;
+    text-decoration: underline;
+  }
+  #signin-guest:hover { color: #aaa; }
+  #signin-status { font-size: 11px; color: #888; }
+
+  /* Player info bar in lobby */
+  #player-info-bar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    background: rgba(0,0,0,0.3);
+    border: 1px solid #3a2a08;
+    border-radius: 6px;
+    padding: 6px 10px;
+    flex-shrink: 0;
+  }
+  #player-info-avatar {
+    width: 32px; height: 32px;
+    border-radius: 50%;
+    border: 2px solid #8B5E1A;
+    object-fit: cover;
+    flex-shrink: 0;
+  }
+  #player-info-name { font-size: 12px; font-weight: bold; color: #f4e84a; flex: 1; }
+  #player-info-rank { font-size: 10px; color: #aaa; }
+  #btn-signout {
+    font-size: 9px;
+    color: #666;
+    background: none;
+    border: 1px solid #333;
+    border-radius: 4px;
+    padding: 2px 7px;
+    cursor: pointer;
+    font-family: Verdana, sans-serif;
+  }
+  #btn-signout:hover { color: #ccc; border-color: #666; }
 </style>
+
+<!-- Firebase -->
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<script>
+  const firebaseConfig = {
+    apiKey: "AIzaSyCM1VPoxsdvMbA53adqnObIjZeNXOoV-yY",
+    authDomain: "poker-67505.firebaseapp.com",
+    databaseURL: "https://poker-67505-default-rtdb.europe-west1.firebasedatabase.app",
+    projectId: "poker-67505",
+    storageBucket: "poker-67505.firebasestorage.app",
+    messagingSenderId: "388637800331",
+    appId: "1:388637800331:web:f9d968f60516071d02e18e",
+    measurementId: "G-YFB6QBXWQ1"
+  };
+  firebase.initializeApp(firebaseConfig);
+  const auth = firebase.auth();
+  const db   = firebase.firestore();
+</script>
 </head>
 <body>
 <div id="game-container">
 
+
+  <!-- Sign-in screen -->
+  <div id="signin-screen">
+    <div id="signin-title">♠ Poker</div>
+    <div id="signin-sub">Sign in to save your stats,<br>track achievements and play multiplayer.</div>
+    <button id="btn-google-signin" onclick="signInWithGoogle()">
+      <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" alt="G">
+      Sign in with Google
+    </button>
+    <span id="signin-guest" onclick="continueAsGuest()">Continue as guest (progress won't be saved)</span>
+    <div id="signin-status"></div>
+  </div>
+
   <!-- LOBBY SCREEN -->
   <div id="lobby" style="display:none;">
     <div id="lobby-title">Poker Tables</div>
+    <div id="player-info-bar">
+      <img id="player-info-avatar" src="" alt="">
+      <div>
+        <div id="player-info-name">Guest</div>
+        <div id="player-info-rank"></div>
+      </div>
+      <button id="btn-signout" onclick="signOut()" style="display:none">Sign Out</button>
+    </div>
     <div id="lobby-bankroll">
       Bankroll: <span id="lobby-bankroll-amount">0</span> <img id="lobby-coin" src="" alt="GP">
     </div>
@@ -2398,6 +2524,7 @@ let stats = { won: 0, lost: 0, resets: 0 };
 
 function saveStats() {
   dbSet('stats', stats).catch(() => {});
+  if (currentUser) savePlayerData();
 }
 function loadStats() {
   return dbGet('stats').then(val => {
@@ -2475,6 +2602,7 @@ function showLobby() {
   showPlayerControls(false);
   document.getElementById('game-container').classList.add('lobby-active');
   document.getElementById('lobby').style.display = 'flex';
+  updatePlayerInfoBar();
   document.getElementById('message-overlay').style.display = 'none';
 
   // Update coin src
@@ -2673,14 +2801,105 @@ function startFresh() {
   showLobby();
 }
 
+
+// ============================================================
+// FIREBASE AUTH
+// ============================================================
+let currentUser = null;
+let isGuest = false;
+
+function signInWithGoogle() {
+  document.getElementById('signin-status').textContent = 'Signing in...';
+  const provider = new firebase.auth.GoogleAuthProvider();
+  auth.signInWithPopup(provider).catch(err => {
+    document.getElementById('signin-status').textContent = 'Error: ' + err.message;
+  });
+}
+
+function continueAsGuest() {
+  isGuest = true;
+  document.getElementById('signin-screen').style.display = 'none';
+  loadBankroll().then(() => loadStats()).then(() => recoverSession()).then(() => showLobby());
+}
+
+function signOut() {
+  auth.signOut().then(() => {
+    currentUser = null;
+    document.getElementById('signin-screen').style.display = 'flex';
+    document.getElementById('lobby').style.display = 'none';
+    document.getElementById('game-container').classList.add('lobby-active');
+  });
+}
+
+// ── Firebase data functions (override IndexedDB when signed in)
+async function fbSave(key, value) {
+  if (!currentUser) return;
+  await db.collection('players').doc(currentUser.uid).set({ [key]: value }, { merge: true });
+}
+
+async function fbLoad(key) {
+  if (!currentUser) return null;
+  const doc = await db.collection('players').doc(currentUser.uid).get();
+  return doc.exists ? doc.data()[key] : null;
+}
+
+async function savePlayerData() {
+  if (!currentUser) return;
+  await db.collection('players').doc(currentUser.uid).set({
+    bankroll,
+    stats,
+    displayName: currentUser.displayName,
+    photoURL: currentUser.photoURL,
+    updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+  }, { merge: true });
+}
+
+async function loadPlayerData() {
+  if (!currentUser) return;
+  const doc = await db.collection('players').doc(currentUser.uid).get();
+  if (doc.exists) {
+    const data = doc.data();
+    if (data.bankroll !== undefined) bankroll = data.bankroll;
+    if (data.stats)    stats    = data.stats;
+    if (!stats.achievements) stats.achievements = {};
+    if (!stats.handsPlayed)  stats.handsPlayed  = 0;
+  }
+}
+
+function updatePlayerInfoBar() {
+  if (currentUser) {
+    document.getElementById('player-info-avatar').src = currentUser.photoURL || '';
+    document.getElementById('player-info-name').textContent = currentUser.displayName || 'Player';
+    document.getElementById('btn-signout').style.display = '';
+  } else {
+    document.getElementById('player-info-avatar').src = '';
+    document.getElementById('player-info-name').textContent = 'Guest';
+    document.getElementById('btn-signout').style.display = 'none';
+  }
+  const rank = getRank(stats.won || 0);
+  document.getElementById('player-info-rank').textContent = rank.icon + ' ' + rank.name;
+}
+
+// Listen for auth state changes
+auth.onAuthStateChanged(async user => {
+  currentUser = user;
+  if (user) {
+    isGuest = false;
+    document.getElementById('signin-screen').style.display = 'none';
+    await loadPlayerData();
+    await recoverSession();
+    updatePlayerInfoBar();
+    showLobby();
+  }
+});
+
 // ============================================================
 // BOOT
 // ============================================================
 window.onload = () => {
-  loadBankroll()
-    .then(() => loadStats())
-    .then(() => recoverSession())
-    .then(() => showLobby());
+  // onAuthStateChanged handles signed-in users automatically
+  // Show sign-in screen initially; it hides once auth resolves
+  // If already signed in, onAuthStateChanged fires immediately
 };
 
 // Save session on normal tab close / navigate away
