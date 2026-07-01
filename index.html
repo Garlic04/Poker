@@ -3675,10 +3675,15 @@ function startMPGame(tableData) {
     renderMPState(s, players);
   });
 
-  // Listen for actions (host only processes them)
+  // Listen for actions (host only) — ignore stale pre-game actions
   if (mpIsHost) {
+    const gameStartTime = Date.now();
     rtdb.ref('tables/' + mpTableId + '/actions').on('child_added', snap => {
-      mpProcessAction(snap.val());
+      const data = snap.val();
+      if (!data) return;
+      // Skip actions older than 10s before game started (Firebase cache)
+      if (data.timestamp && data.timestamp < gameStartTime - 10000) return;
+      mpProcessAction(data);
     });
   }
 
@@ -3864,24 +3869,29 @@ function renderMPState(s, players) {
     document.getElementById('chips-player').textContent = fmt(_playerChips);
   }
 
-  // Community cards
-  if (s.community) {
+  // Community cards — Firebase may return as object
+  const community = Array.isArray(s.community) ? s.community : Object.values(s.community || {});
+  if (community.length > 0) {
     const area = document.getElementById('community-area');
     area.innerHTML = '';
-    (s.community || []).forEach(c => {
-      const [rank, suit] = [c.slice(0,-1), c.slice(-1)];
+    community.forEach(c => {
+      if (!c) return;
+      const suit = c.slice(-1);
+      const rank = c.slice(0, -1);
       const div = document.createElement('div');
       div.className = 'community-card' + (suit==='♥'||suit==='♦' ? ' red' : '');
       div.innerHTML = `<span>${rank}</span><span>${suit}</span>`;
       area.appendChild(div);
     });
+  } else {
+    document.getElementById('community-area').innerHTML = '';
   }
 
   // Pot
   document.getElementById('pot-label').textContent = fmt(s.pot || 0);
 
-  // Status
-  const toAct = s.toAct || [];
+  // Status and turn
+  const toAct = Array.isArray(s.toAct) ? s.toAct : Object.values(s.toAct || {});
   if (toAct.length > 0) {
     const nextUid = toAct[0];
     const name = nextUid === mpMyUid ? 'Your turn' : ((players[nextUid]?.publicInfo?.name || 'Player') + '\'s turn');
@@ -3891,8 +3901,8 @@ function renderMPState(s, players) {
   }
 
   // Phase label
-  const labels = { preflop: '', flop: '— Flop —', turn: '— Turn —', river: '— River —' };
-  if (labels[s.phase]) setStatus(labels[s.phase]);
+  const phaseLabels = { flop: '— Flop —', turn: '— Turn —', river: '— River —' };
+  if (phaseLabels[s.phase]) setStatus(phaseLabels[s.phase]);
 
   // Check if hand ended
   if (s.phase === 'showdown' || s.phase === 'ended') {
@@ -3961,87 +3971,112 @@ async function mpProcessAction(actionData) {
   if (!mpIsHost || !mpState) return;
   const { uid, action, amount } = actionData;
 
-  // Verify it's this player's turn
-  const toAct = mpState.toAct || [];
-  if (toAct[0] !== uid) return;
-
+  // Convert Firebase objects to arrays
   let newState = JSON.parse(JSON.stringify(mpState));
-  const chips = newState.chips;
-  const bets  = newState.bets || {};
+  newState.toAct     = Array.isArray(newState.toAct)     ? newState.toAct     : Object.values(newState.toAct || {});
+  newState.activePids = Array.isArray(newState.activePids) ? newState.activePids : Object.values(newState.activePids || {});
+
+  // Verify it's this player's turn
+  if (newState.toAct[0] !== uid) {
+    console.warn('Action from wrong player', uid, 'expected', newState.toAct[0]);
+    return;
+  }
+
+  const chips   = newState.chips || {};
+  const bets    = newState.bets  || {};
   const highBet = newState.highBet || 0;
+  const folded  = newState.folded  || {};
+  const allin   = newState.allin   || {};
 
   if (action === 'fold') {
-    newState.folded[uid] = true;
+    folded[uid] = true;
     newState.toAct.shift();
   } else if (action === 'check') {
     newState.toAct.shift();
   } else if (action === 'call') {
     const toCall = Math.min(highBet - (bets[uid]||0), chips[uid]);
-    chips[uid] -= toCall;
-    bets[uid]   = (bets[uid]||0) + toCall;
+    chips[uid]  -= toCall;
+    bets[uid]    = (bets[uid]||0) + toCall;
     newState.pot += toCall;
-    if (chips[uid] === 0) newState.allin[uid] = true;
+    if (chips[uid] === 0) allin[uid] = true;
     newState.toAct.shift();
   } else if (action === 'bet' || action === 'raise') {
-    const bet = Math.min(amount, chips[uid]);
-    const prev = bets[uid] || 0;
-    chips[uid] -= (bet - prev);
-    newState.pot += (bet - prev);
-    bets[uid] = bet;
-    newState.highBet = bet;
-    newState.lastRaiseSize = bet - prev;
-    if (chips[uid] === 0) newState.allin[uid] = true;
-    // Re-open action to others
-    const remaining = newState.activePids.filter(p =>
-      !newState.folded[p] && !newState.allin[p] && p !== uid
-    );
-    newState.toAct = [...remaining, ...newState.toAct.slice(1)];
+    const betAmt = Math.min(amount, chips[uid]);
+    const prev   = bets[uid] || 0;
+    chips[uid]  -= (betAmt - prev);
+    newState.pot += (betAmt - prev);
+    bets[uid]    = betAmt;
+    newState.highBet = betAmt;
+    newState.lastRaiseSize = betAmt - prev;
+    if (chips[uid] === 0) allin[uid] = true;
+    // Re-open to others
+    const others = newState.activePids.filter(p => !folded[p] && !allin[p] && p !== uid);
+    newState.toAct = [...others];
   }
+
+  newState.bets   = bets;
+  newState.chips  = chips;
+  newState.folded = folded;
+  newState.allin  = allin;
 
   // Clear processed action
   await rtdb.ref(`tables/${mpTableId}/actions/${uid}`).remove();
 
   // Check if betting round is over
-  const active = newState.activePids.filter(p => !newState.folded[p]);
-  const nonAllin = active.filter(p => !newState.allin[p]);
+  const active    = newState.activePids.filter(p => !folded[p]);
+  const canAct    = newState.toAct.filter(p => !folded[p] && !allin[p]);
 
   if (active.length === 1) {
-    // Everyone folded — award pot
-    newState.phase = 'ended';
+    newState.phase  = 'ended';
     newState.winner = active[0];
-    newState.toAct = [];
-  } else if (newState.toAct.filter(p => !newState.folded[p] && !newState.allin[p]).length === 0) {
-    // Betting round over — advance phase
+    newState.toAct  = [];
+  } else if (canAct.length === 0) {
     newState = await mpAdvancePhase(newState);
   }
 
-  newState.bets = bets;
-  newState.chips = chips;
+  // Update local mpState so next action processes correctly
+  mpState = newState;
+
   await rtdb.ref(`tables/${mpTableId}/state`).set(newState);
 }
 
 async function mpAdvancePhase(s) {
-  const deck = s.deck || [];
+  // Firebase returns arrays as objects — convert to real arrays
+  let deck = Array.isArray(s.deck) ? [...s.deck] : Object.values(s.deck || {});
+  let community = Array.isArray(s.community) ? [...s.community] : Object.values(s.community || {});
+
   if (s.phase === 'preflop') {
-    s.community = [deck.pop(), deck.pop(), deck.pop()];
+    community = [deck.shift(), deck.shift(), deck.shift()];
     s.phase = 'flop';
   } else if (s.phase === 'flop') {
-    s.community.push(deck.pop());
+    community.push(deck.shift());
     s.phase = 'turn';
   } else if (s.phase === 'turn') {
-    s.community.push(deck.pop());
+    community.push(deck.shift());
     s.phase = 'river';
   } else if (s.phase === 'river') {
     s.phase = 'showdown';
   }
-  // Reset bets for new street
+
+  s.deck = deck;
+  s.community = community;
   s.bets = {};
   s.highBet = 0;
-  s.lastRaiseSize = s.lastRaiseSize; // keep min raise
-  const active = s.activePids.filter(p => !s.folded[p] && !s.allin[p]);
-  const sbIdx  = s.activePids.indexOf(s.sbUid);
-  // Action starts from first active player left of dealer
-  s.toAct = active;
+
+  // toAct: active non-allin players starting left of dealer
+  const activePids = Array.isArray(s.activePids) ? s.activePids : Object.values(s.activePids || {});
+  const folded = s.folded || {};
+  const allin  = s.allin  || {};
+  const active = activePids.filter(p => !folded[p] && !allin[p]);
+  // Start from player left of dealer
+  const dealerPos = activePids.indexOf(s.dealerUid);
+  const reordered = [];
+  for (let i = 1; i <= activePids.length; i++) {
+    const uid = activePids[(dealerPos + i) % activePids.length];
+    if (active.includes(uid)) reordered.push(uid);
+  }
+  s.toAct = reordered;
+  s.activePids = activePids;
   return s;
 }
 
