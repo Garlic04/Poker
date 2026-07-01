@@ -1029,7 +1029,7 @@
   #btn-join-code:hover { filter: brightness(1.2); }
 
   #mp-tables-list { display: flex; flex-direction: column; gap: 5px; max-height: 260px; overflow-y: auto; }
-  #mp-tables-empty { font-size: 11px; color: #fff; text-align: center; padding: 20px; }
+  #mp-tables-empty { font-size: 11px; color: #fff !important; text-align: center; padding: 20px; }
 
   .mp-table-row {
     display: flex;
@@ -3360,10 +3360,16 @@ function setTableVisibility(v) {
 
 async function createTable() {
   if (!currentUser || !rtdb) return;
-  const tierIdx    = parseInt(document.getElementById('ct-tier').value);
-  const t_check    = TABLES[tierIdx];
+  const select = document.getElementById('ct-tier');
+  const tierIdx = parseInt(select.value);
+  const t_check = TABLES[tierIdx];
+  // Double-check selected option isn't disabled
+  if (select.options[tierIdx] && select.options[tierIdx].disabled) {
+    alert('You cannot afford this table.');
+    return;
+  }
   if (bankroll < t_check.min) {
-    alert('Not enough GP for this table.');
+    alert('Not enough GP for this table. You need at least ' + fmt(t_check.min) + ' GP.');
     return;
   }
   const maxPlayers = parseInt(document.getElementById('ct-maxplayers').value);
