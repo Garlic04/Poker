@@ -75,6 +75,15 @@
     80%  { opacity: 1; transform: scale(0.7); }
     100% { opacity: 0; transform: scale(0.4); }
   }
+  @keyframes cardDealIn {
+    0%   { opacity: 0; transform: translateY(-26px) scale(0.5) rotate(-10deg); }
+    60%  { opacity: 1; }
+    100% { opacity: 1; transform: translateY(0) scale(1) rotate(0deg); }
+  }
+  .card-deal-in {
+    animation: cardDealIn 0.32s ease-out both;
+  }
+  .seat.folded .seat-cards-offset { opacity: 0.3; }
   /* Badge overlay — sits on top of everything, not clipped by seats */
   #badge-overlay {
     position: absolute;
@@ -3721,6 +3730,8 @@ let mpDisconnectRef = null;
 let _mpPrevBets = {};           // for detecting bet->pot coin animations
 let _mpPrevPhase = null;
 let _mpWinnerAnimatedForHand = null; // hand number we've already animated pot->winner for
+let _mpPrevHandNum = null;      // hand number we've already dealt opponent card-backs for
+let _mpPrevCommunityLen = 0;    // how many community cards were showing last render
 
 function mpSeatElIdFor(uid) {
   const el = document.querySelector('.seat[data-mp-uid="' + uid + '"]');
@@ -3742,6 +3753,8 @@ function startMPGame(tableData) {
   _mpPrevBets = {};
   _mpPrevPhase = null;
   _mpWinnerAnimatedForHand = null;
+  _mpPrevHandNum = null;
+  _mpPrevCommunityLen = 0;
 
   const cfg = tableData.config;
   const players = tableData.players || {};
@@ -3973,19 +3986,29 @@ function renderMPState(s, players) {
   }
 
   // Coin animation: seat -> pot whenever a bet increases (blinds, calls, raises).
-  // Reset the comparison baseline whenever the phase changes so we're only
-  // ever comparing bets within the same street/hand.
-  if (s.phase !== _mpPrevPhase) _mpPrevBets = {};
-  const curBets = s.bets || {};
-  Object.keys(curBets).forEach(uid => {
-    const newBet = parseInt(curBets[uid]) || 0;
-    const oldBet = parseInt(_mpPrevBets[uid]) || 0;
-    if (newBet > oldBet) {
-      const seatId = mpSeatElIdFor(uid);
-      if (seatId) animateCoinToPot(seatId);
-    }
-  });
-  _mpPrevBets = { ...curBets };
+  // Only ever animate during actual betting streets — the 'bets' field still
+  // holds leftover river amounts once a hand ends, and without this guard
+  // that leftover would misread as a fresh bet for both players (including
+  // the loser) the moment the hand resolved.
+  const bettingPhases = ['preflop', 'flop', 'turn', 'river'];
+  if (s.phase !== _mpPrevPhase) {
+    // Only a brand-new hand (preflop) should restart the comparison from
+    // zero, so blinds animate in. Any other transition just carries the
+    // existing bets forward with nothing to animate.
+    _mpPrevBets = (s.phase === 'preflop') ? {} : { ...(s.bets || {}) };
+  }
+  if (bettingPhases.includes(s.phase)) {
+    const curBets = s.bets || {};
+    Object.keys(curBets).forEach(uid => {
+      const newBet = parseInt(curBets[uid]) || 0;
+      const oldBet = parseInt(_mpPrevBets[uid]) || 0;
+      if (newBet > oldBet) {
+        const seatId = mpSeatElIdFor(uid);
+        if (seatId) animateCoinToPot(seatId);
+      }
+    });
+  }
+  _mpPrevBets = { ...(s.bets || {}) };
   _mpPrevPhase = s.phase;
 
   // Coin animation: pot -> winner, once per hand, right when the hand resolves
@@ -3993,6 +4016,30 @@ function renderMPState(s, players) {
     _mpWinnerAnimatedForHand = s.hand;
     const winnerSeatId = mpSeatElIdFor(s.winner);
     if (winnerSeatId) animatePotToWinner(winnerSeatId, () => {});
+  }
+
+  // Deal opponent card-backs with a staggered "dealing" animation, once per
+  // hand. Opponent seats never showed card-backs at all before this — only
+  // community cards and your own hole cards were being rendered.
+  if (s.hand !== _mpPrevHandNum) {
+    _mpPrevHandNum = s.hand;
+    document.querySelectorAll('.seat-cards-offset').forEach(c => c.innerHTML = '');
+    const activePids = Array.isArray(s.activePids) ? s.activePids : Object.values(s.activePids || {});
+    let dealIdx = 0;
+    activePids.forEach(uid => {
+      if (uid === mpMyUid) return; // own cards rendered by renderMPMyCards
+      const seatEl = document.querySelector('.seat[data-mp-uid="' + uid + '"]');
+      const container = seatEl && seatEl.querySelector('.seat-cards-offset');
+      if (!container) return;
+      for (let c = 0; c < 2; c++) {
+        const div = document.createElement('div');
+        div.className = 'seat-card card-deal-in';
+        div.textContent = '🂠';
+        div.style.animationDelay = (dealIdx * 90) + 'ms';
+        container.appendChild(div);
+        dealIdx++;
+      }
+    });
   }
 
   // Community cards — Firebase may return as object
@@ -4008,11 +4055,18 @@ function renderMPState(s, players) {
       const rank = c.slice(0, -1);
       if (suit === '♥' || suit === '♦') div.classList.add('red');
       div.innerHTML = `<div class="card-rank">${rank}</div><div class="card-suit">${suit}</div>`;
+      // Only animate cards that weren't already showing last render, so
+      // re-renders mid-street (e.g. someone betting) don't replay the deal.
+      if (i >= _mpPrevCommunityLen) {
+        div.classList.add('card-deal-in');
+        div.style.animationDelay = ((i - _mpPrevCommunityLen) * 120) + 'ms';
+      }
     } else {
       div.classList.add('hidden');
     }
     area.appendChild(div);
   }
+  _mpPrevCommunityLen = community.length;
 
   // Pot
   document.getElementById('pot-label').textContent = fmt(s.pot || 0);
@@ -4055,13 +4109,14 @@ function renderMPMyCards(cardData) {
   if (!hud) return;
   hud.innerHTML = '';
   if (!cardData || !cardData.c1) return;
-  [cardData.c1, cardData.c2].filter(Boolean).forEach(c => {
+  [cardData.c1, cardData.c2].filter(Boolean).forEach((c, i) => {
     // c is a string like "A♠" or "10♥"
     const suit = c.slice(-1);
     const rank = c.slice(0, -1);
     const isRed = suit === '♥' || suit === '♦';
     const div = document.createElement('div');
-    div.className = 'player-card' + (isRed ? ' red' : '');
+    div.className = 'player-card card-deal-in' + (isRed ? ' red' : '');
+    div.style.animationDelay = (i * 90) + 'ms';
     div.innerHTML = `<div class="pc-rank">${rank}</div><div class="pc-suit">${suit}</div><div class="pc-rank-bot">${rank}</div>`;
     hud.appendChild(div);
   });
