@@ -1029,7 +1029,7 @@
   #btn-join-code:hover { filter: brightness(1.2); }
 
   #mp-tables-list { display: flex; flex-direction: column; gap: 5px; max-height: 260px; overflow-y: auto; }
-  #mp-tables-empty { font-size: 11px; color: #666; text-align: center; padding: 20px; }
+  #mp-tables-empty { font-size: 11px; color: #fff; text-align: center; padding: 20px; }
 
   .mp-table-row {
     display: flex;
@@ -2835,6 +2835,7 @@ const TABLES = [
 
 let currentTable = null; // index into TABLES
 let bankroll = 0;
+let _dataLoaded = false;
 let tableBuyIn = 0;      // chips bought into current table session
 
 const DB_NAME    = 'PiratePokerDB';
@@ -2947,8 +2948,10 @@ function recoverSession() {
 function loadBankroll() {
   return dbGet('bankroll').then(val => {
     bankroll = (val !== undefined && val !== null) ? parseInt(val) : STARTING_BANKROLL;
+    _dataLoaded = true;
   }).catch(() => {
     bankroll = STARTING_BANKROLL;
+    _dataLoaded = true;
   });
 }
 
@@ -2958,7 +2961,7 @@ function showLobby() {
   document.getElementById('lobby').style.display = 'flex';
   updatePlayerInfoBar();
   // Broke panel — only in solo mode
-  const broke = mpMode === 'solo' && bankroll < 20;
+  const broke = mpMode === 'solo' && bankroll < 20 && _dataLoaded;
   document.getElementById('broke-panel').style.display  = broke ? 'flex' : 'none';
   document.getElementById('lobby-tables').style.display = (mpMode === 'solo' && !broke) ? 'flex' : 'none';
   document.getElementById('lobby-hint').style.display   = (mpMode === 'solo' && !broke) ? 'block' : 'none';
@@ -3225,11 +3228,13 @@ async function loadPlayerData() {
   if (!currentUser || !db) return;
   const doc = await db.collection('players').doc(currentUser.uid).get();
   if (doc.exists) {
+    _dataLoaded = true;
     const data = doc.data();
     if (data.bankroll !== undefined) bankroll = data.bankroll;
     if (data.stats)    stats    = data.stats;
     if (!stats.achievements) stats.achievements = {};
     if (!stats.handsPlayed)  stats.handsPlayed  = 0;
+  _dataLoaded = true;
   } else {
     // First time sign-in — give starting bankroll and save
     bankroll = STARTING_BANKROLL;
@@ -3330,6 +3335,17 @@ function generateCode() {
 // ── Create table dialog
 function openCreateTable() {
   if (!currentUser) { alert('Please sign in to create a table.'); return; }
+  // Disable tiers player can't afford
+  const select = document.getElementById('ct-tier');
+  let firstAffordable = -1;
+  Array.from(select.options).forEach((opt, i) => {
+    const t = TABLES[i];
+    const canAfford = bankroll >= t.min;
+    opt.disabled = !canAfford;
+    opt.style.color = canAfford ? '' : '#555';
+    if (canAfford && firstAffordable === -1) firstAffordable = i;
+  });
+  if (firstAffordable !== -1) select.value = firstAffordable;
   document.getElementById('create-table-dialog').style.display = 'flex';
 }
 function closeCreateTable() {
@@ -3344,6 +3360,11 @@ function setTableVisibility(v) {
 async function createTable() {
   if (!currentUser || !rtdb) return;
   const tierIdx    = parseInt(document.getElementById('ct-tier').value);
+  const t_check    = TABLES[tierIdx];
+  if (bankroll < t_check.min) {
+    alert('Not enough GP for this table.');
+    return;
+  }
   const maxPlayers = parseInt(document.getElementById('ct-maxplayers').value);
   const t          = TABLES[tierIdx];
   const code       = generateCode();
