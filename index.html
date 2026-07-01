@@ -923,11 +923,11 @@
   #btn-google-signin img { width: 22px; height: 22px; }
   #signin-guest {
     font-size: 10px;
-    color: #666;
+    color: #ffffff;
     cursor: pointer;
     text-decoration: underline;
   }
-  #signin-guest:hover { color: #aaa; }
+  #signin-guest:hover { color: #ccc; }
   #signin-status { font-size: 11px; color: #888; }
 
   /* Player info bar in lobby */
@@ -979,9 +979,14 @@
     appId: "1:388637800331:web:f9d968f60516071d02e18e",
     measurementId: "G-YFB6QBXWQ1"
   };
-  firebase.initializeApp(firebaseConfig);
-  const auth = firebase.auth();
-  const db   = firebase.firestore();
+  let auth, db;
+  try {
+    firebase.initializeApp(firebaseConfig);
+    auth = firebase.auth();
+    db   = firebase.firestore();
+  } catch(e) {
+    console.warn('Firebase unavailable — running in local mode');
+  }
 </script>
 </head>
 <body>
@@ -2809,6 +2814,7 @@ let currentUser = null;
 let isGuest = false;
 
 function signInWithGoogle() {
+  if (!auth) { alert("Firebase not available"); return; }
   document.getElementById('signin-status').textContent = 'Signing in...';
   const provider = new firebase.auth.GoogleAuthProvider();
   auth.signInWithPopup(provider).catch(err => {
@@ -2823,6 +2829,7 @@ function continueAsGuest() {
 }
 
 function signOut() {
+  if (!auth) return;
   auth.signOut().then(() => {
     currentUser = null;
     document.getElementById('signin-screen').style.display = 'flex';
@@ -2833,18 +2840,18 @@ function signOut() {
 
 // ── Firebase data functions (override IndexedDB when signed in)
 async function fbSave(key, value) {
-  if (!currentUser) return;
+  if (!currentUser || !db) return;
   await db.collection('players').doc(currentUser.uid).set({ [key]: value }, { merge: true });
 }
 
 async function fbLoad(key) {
-  if (!currentUser) return null;
+  if (!currentUser || !db) return null;
   const doc = await db.collection('players').doc(currentUser.uid).get();
   return doc.exists ? doc.data()[key] : null;
 }
 
 async function savePlayerData() {
-  if (!currentUser) return;
+  if (!currentUser || !db) return;
   await db.collection('players').doc(currentUser.uid).set({
     bankroll,
     stats,
@@ -2855,7 +2862,7 @@ async function savePlayerData() {
 }
 
 async function loadPlayerData() {
-  if (!currentUser) return;
+  if (!currentUser || !db) return;
   const doc = await db.collection('players').doc(currentUser.uid).get();
   if (doc.exists) {
     const data = doc.data();
@@ -2881,7 +2888,7 @@ function updatePlayerInfoBar() {
 }
 
 // Listen for auth state changes
-auth.onAuthStateChanged(async user => {
+if (auth) { auth.onAuthStateChanged(async user => {
   currentUser = user;
   if (user) {
     isGuest = false;
@@ -2892,6 +2899,15 @@ auth.onAuthStateChanged(async user => {
     showLobby();
   }
 });
+} else {
+  // No Firebase — go straight to local mode
+  window.addEventListener('load', () => {
+    loadBankroll().then(() => loadStats()).then(() => recoverSession()).then(() => {
+      document.getElementById('signin-screen').style.display = 'none';
+      showLobby();
+    });
+  });
+}
 
 // ============================================================
 // BOOT
