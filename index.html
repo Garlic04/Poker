@@ -3335,17 +3335,18 @@ function generateCode() {
 // ── Create table dialog
 function openCreateTable() {
   if (!currentUser) { alert('Please sign in to create a table.'); return; }
-  // Disable tiers player can't afford
+  if (!rtdb) { alert('Multiplayer not available — please play on the live site.'); return; }
   const select = document.getElementById('ct-tier');
   let firstAffordable = -1;
   Array.from(select.options).forEach((opt, i) => {
     const t = TABLES[i];
     const canAfford = bankroll >= t.min;
     opt.disabled = !canAfford;
-    opt.style.color = canAfford ? '' : '#555';
+    opt.style.color = canAfford ? '#f4c84a' : '#555';
     if (canAfford && firstAffordable === -1) firstAffordable = i;
   });
-  if (firstAffordable !== -1) select.value = firstAffordable;
+  if (firstAffordable !== -1) select.value = String(firstAffordable);
+  else { alert('You don\'t have enough GP to create any table.'); return; }
   document.getElementById('create-table-dialog').style.display = 'flex';
 }
 function closeCreateTable() {
@@ -3401,7 +3402,12 @@ async function createTable() {
   bankroll -= buyIn;
   saveBankroll();
 
-  await rtdb.ref('tables/' + tableId).set(tableData);
+  await rtdb.ref('tables/' + tableId).set(tableData).catch(err => {
+    console.error('Failed to create table:', err);
+    alert('Failed to create table: ' + err.message + '\n\nCheck Firebase rules allow authenticated writes.');
+    bankroll += buyIn; saveBankroll(); // refund
+    return;
+  });
   closeCreateTable();
   enterWaitingRoom(tableId, true);
 }
