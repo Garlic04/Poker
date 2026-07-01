@@ -3495,10 +3495,12 @@ function listenPublicTables() {
     const list = document.getElementById('mp-tables-list');
     const empty = document.getElementById('mp-tables-empty');
     const tables = snap.val() || {};
+    console.log('Tables snapshot:', JSON.stringify(tables).slice(0, 300));
     const waiting = Object.entries(tables).filter(([id, t]) =>
       t.state && t.state.phase === 'waiting' &&
       t.config && t.config.visibility === 'public'
     );
+    console.log('Public waiting tables:', waiting.length);
     if (waiting.length === 0) {
       list.innerHTML = '';
       empty.style.display = 'block';
@@ -3874,20 +3876,21 @@ function renderMPState(s, players) {
 
   // Community cards — Firebase may return as object
   const community = Array.isArray(s.community) ? s.community : Object.values(s.community || {});
-  if (community.length > 0) {
-    const area = document.getElementById('community-area');
-    area.innerHTML = '';
-    community.forEach(c => {
-      if (!c) return;
+  const area = document.getElementById('community-area');
+  area.innerHTML = '';
+  for (let i = 0; i < 5; i++) {
+    const div = document.createElement('div');
+    div.className = 'community-card';
+    const c = community[i];
+    if (c) {
       const suit = c.slice(-1);
       const rank = c.slice(0, -1);
-      const div = document.createElement('div');
-      div.className = 'community-card' + (suit==='♥'||suit==='♦' ? ' red' : '');
-      div.innerHTML = `<span>${rank}</span><span>${suit}</span>`;
-      area.appendChild(div);
-    });
-  } else {
-    document.getElementById('community-area').innerHTML = '';
+      if (suit === '♥' || suit === '♦') div.classList.add('red');
+      div.innerHTML = `<div class="card-rank">${rank}</div><div class="card-suit">${suit}</div>`;
+    } else {
+      div.classList.add('hidden');
+    }
+    area.appendChild(div);
   }
 
   // Pot
@@ -4047,6 +4050,7 @@ async function mpAdvancePhase(s) {
   // Firebase returns arrays as objects — convert to real arrays
   let deck = Array.isArray(s.deck) ? [...s.deck] : Object.values(s.deck || {});
   let community = Array.isArray(s.community) ? [...s.community] : Object.values(s.community || {});
+  console.log('mpAdvancePhase:', s.phase, 'deck size:', deck.length, 'sample:', deck[0]);
 
   if (s.phase === 'preflop') {
     community = [deck.shift(), deck.shift(), deck.shift()];
