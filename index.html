@@ -3699,44 +3699,65 @@ function startMPGame(tableData) {
     .onDisconnect().set(false);
 }
 
-// ── Seat setup: map real players to seat positions around the table
+// ── Seat setup: fixed global order, rotate display so local player is at bottom
 function setupMPSeats(players, cfg) {
+  // mpSeats is sorted by joinedAt — this is the fixed canonical seat order
+  // Find where local player sits in that order
   const myIdx = mpSeats.indexOf(mpMyUid);
-  // Reorder so local player is always "player" seat
-  const reordered = [...mpSeats.slice(myIdx), ...mpSeats.slice(0, myIdx)];
 
-  // Hide all AI seats, show game table
-  document.querySelectorAll('.seat').forEach(s => s.style.display = 'none');
+  // Map: canonical seat index → visual seat element
+  // Local player always goes to seat-player (bottom)
+  // Others get assigned clockwise from seat-0 based on their offset from local player
+  const visualSeats = ['seat-0','seat-1','seat-2','seat-3','seat-4'];
+
+  // Clear all seats
+  document.querySelectorAll('.seat').forEach(s => {
+    s.style.display = 'none';
+    const chipSpan = s.querySelector('.seat-chips span:not(.chip-spacer)');
+    if (chipSpan) chipSpan.textContent = '0';
+    delete s.dataset.mpUid;
+    delete s.dataset.canonicalIdx;
+  });
   document.getElementById('seat-player').style.display = '';
+  document.getElementById('seat-player').dataset.mpUid = mpMyUid;
+  document.getElementById('seat-player').dataset.canonicalIdx = myIdx;
 
-  // Available seat ids (not including player)
-  const seatIds = ['seat-0','seat-1','seat-2','seat-3','seat-4'];
+  // Assign other players to visual seats in order offset from local player
+  let visualIdx = 0;
+  for (let offset = 1; offset < mpSeats.length; offset++) {
+    const canonIdx = (myIdx + offset) % mpSeats.length;
+    const uid = mpSeats[canonIdx];
+    if (visualIdx >= visualSeats.length) break;
+    const seatEl = document.getElementById(visualSeats[visualIdx]);
+    if (!seatEl) { visualIdx++; continue; }
+    seatEl.style.display = '';
+    seatEl.dataset.mpUid = uid;
+    seatEl.dataset.canonicalIdx = canonIdx;
+    visualIdx++;
+  }
 
-  reordered.forEach((uid, i) => {
-    if (uid === mpMyUid) {
-      // Update player seat with real info
-      const p = players[uid].publicInfo;
+  // Now populate all visible seats with player info
+  document.querySelectorAll('.seat').forEach(seatEl => {
+    const uid = seatEl.dataset.mpUid;
+    if (!uid || !players[uid]) return;
+    const p = players[uid].publicInfo;
+    if (!p) return;
+
+    if (seatEl.id === 'seat-player') {
       const frame = document.getElementById('avatar-player');
       frame.innerHTML = p.photo
         ? `<img src="${p.photo}" style="width:100%;height:100%;border-radius:50%;object-fit:cover;">`
         : '🧑';
       document.querySelector('#seat-player .seat-name').textContent = 'You';
-      document.getElementById('chips-player').textContent = fmt(p.chips);
-      _playerChips = p.chips;
-    } else if (i < seatIds.length + 1) {
-      const seatIdx = i - 1; // skip seat 0 (player)
-      if (seatIdx < 0 || seatIdx >= seatIds.length) return;
-      const seatEl = document.getElementById(seatIds[seatIdx]);
-      if (!seatEl) return;
-      seatEl.style.display = '';
-      const p = players[uid].publicInfo;
-      const rank = getRank(p.chips || 0);
+      document.getElementById('chips-player').textContent = fmt(parseInt(p.chips) || 0);
+      _playerChips = parseInt(p.chips) || 0;
+    } else {
       seatEl.querySelector('.avatar-frame').innerHTML = p.photo
         ? `<img src="${p.photo}" style="width:100%;height:100%;border-radius:50%;object-fit:cover;">`
         : '🧑';
       seatEl.querySelector('.seat-name').textContent = p.name || 'Player';
-      seatEl.querySelector('.seat-chips span').textContent = fmt(p.chips || 0);
-      seatEl.dataset.mpUid = uid;
+      const chipSpan = seatEl.querySelector('.seat-chips span:not(.chip-spacer)');
+      if (chipSpan) chipSpan.textContent = fmt(parseInt(p.chips) || 0);
     }
   });
 }
@@ -3762,8 +3783,8 @@ async function mpDealNewHand(tableData) {
   // Write each player's cards to their private path
   const writes = activePids.map(uid =>
     rtdb.ref(`tables/${mpTableId}/players/${uid}/privateCards`).set({
-      c1: hands[uid][0],
-      c2: hands[uid][1]
+      c1: hands[uid][0].rank + hands[uid][0].suit,
+      c2: hands[uid][1].rank + hands[uid][1].suit,
     })
   );
   await Promise.all(writes);
@@ -3830,7 +3851,8 @@ function renderMPState(s, players) {
   document.querySelectorAll('.seat[data-mp-uid]').forEach(el => {
     const uid = el.dataset.mpUid;
     if (s.chips && s.chips[uid] !== undefined) {
-      el.querySelector('.seat-chips span').textContent = fmt(s.chips[uid]);
+      const sp = el.querySelector('.seat-chips span:not(.chip-spacer)');
+      if (sp) sp.textContent = fmt(parseInt(s.chips[uid]) || 0);
     }
     if (s.folded && s.folded[uid]) el.classList.add('folded');
     else el.classList.remove('folded');
@@ -3883,9 +3905,9 @@ function renderMPMyCards(cardData) {
   const hud = document.getElementById('hud-cards-inner');
   if (!hud) return;
   hud.innerHTML = '';
-  if (!cardData) return;
-  const cards = [cardData.c1, cardData.c2].filter(Boolean);
-  cards.forEach(c => {
+  if (!cardData || !cardData.c1) return;
+  [cardData.c1, cardData.c2].filter(Boolean).forEach(c => {
+    // c is a string like "A♠" or "10♥"
     const suit = c.slice(-1);
     const rank = c.slice(0, -1);
     const isRed = suit === '♥' || suit === '♦';
