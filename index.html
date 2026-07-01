@@ -3414,6 +3414,19 @@ async function createTable() {
     bankroll += buyIn; saveBankroll(); // refund
     return;
   });
+
+  // Keep a lightweight public index so other users can browse open tables
+  // (they don't have read access to the full /tables tree, which also
+  // holds private card data).
+  if (mpTableVisibility === 'public') {
+    await rtdb.ref('publicTables/' + tableId).set({
+      hostName: currentUser.displayName || 'Host',
+      tierIdx, maxPlayers,
+      playerCount: 1,
+      createdAt: firebase.database.ServerValue.TIMESTAMP,
+    }).catch(err => console.error('Failed to list public table:', err));
+  }
+
   closeCreateTable();
   enterWaitingRoom(tableId, true);
 }
@@ -3482,6 +3495,12 @@ async function joinTable(tableId) {
     }
   });
 
+  // Keep the public listing's player count in sync
+  const pubSnap = await rtdb.ref('publicTables/' + tableId).once('value');
+  if (pubSnap.exists()) {
+    await rtdb.ref('publicTables/' + tableId + '/playerCount').set(playerCount + 1);
+  }
+
   closeJoinCode();
   enterWaitingRoom(tableId, false);
 }
@@ -3490,38 +3509,31 @@ async function joinTable(tableId) {
 function listenPublicTables() {
   if (!rtdb) return;
   stopListeningPublicTables();
-  mpPublicTablesRef = rtdb.ref('tables');
+  mpPublicTablesRef = rtdb.ref('publicTables');
   mpPublicTablesRef.on('value', snap => {
     const list = document.getElementById('mp-tables-list');
     const empty = document.getElementById('mp-tables-empty');
     const tables = snap.val() || {};
-    console.log('Tables snapshot:', JSON.stringify(tables).slice(0, 300));
-    const waiting = Object.entries(tables).filter(([id, t]) =>
-      t.state && t.state.phase === 'waiting' &&
-      t.config && t.config.visibility === 'public'
-    );
-    console.log('Public waiting tables:', waiting.length);
-    if (waiting.length === 0) {
+    const entries = Object.entries(tables);
+    if (entries.length === 0) {
       list.innerHTML = '';
       empty.style.display = 'block';
       empty.textContent = 'No public tables open. Create one!';
     } else {
       empty.style.display = 'none';
       list.innerHTML = '';
-      waiting.forEach(([id, t]) => {
-        const cfg = t.config;
-        const players = Object.keys(t.players || {});
-        const tier = TABLES[cfg.tierIdx] || TABLES[0];
-        const isFull = players.length >= cfg.maxPlayers;
+      entries.forEach(([id, t]) => {
+        const tier = TABLES[t.tierIdx] || TABLES[0];
+        const isFull = (t.playerCount || 0) >= t.maxPlayers;
         const row = document.createElement('div');
         row.className = 'mp-table-row' + (isFull ? ' full' : '');
         row.innerHTML = `
           <div class="mp-table-tier">${tier.icon}</div>
           <div class="mp-table-info">
-            <div class="mp-table-host">${cfg.hostName}'s Table</div>
+            <div class="mp-table-host">${t.hostName}'s Table</div>
             <div class="mp-table-details">${tier.name} · Buy-in: ${fmt(tier.min)}–${fmt(tier.max)} GP · Blinds: ${fmt(tier.sb)}/${fmt(tier.bb)}</div>
           </div>
-          <div class="mp-table-players">${players.length}/${cfg.maxPlayers}</div>
+          <div class="mp-table-players">${t.playerCount || 0}/${t.maxPlayers}</div>
         `;
         if (!isFull) row.onclick = () => joinTable(id);
         list.appendChild(row);
@@ -3608,7 +3620,17 @@ async function leaveWaitingRoom() {
   if (snap.exists()) { bankroll += snap.val(); saveBankroll(); }
   await rtdb.ref('tables/' + mpTableId + '/players/' + currentUser.uid).remove();
   // If host and leaving, reassign or delete table
-  if (mpIsHost) await rtdb.ref('tables/' + mpTableId).remove();
+  if (mpIsHost) {
+    await rtdb.ref('tables/' + mpTableId).remove();
+    await rtdb.ref('publicTables/' + mpTableId).remove().catch(() => {});
+  } else {
+    const pubRef = rtdb.ref('publicTables/' + mpTableId);
+    const pubSnap = await pubRef.once('value');
+    if (pubSnap.exists()) {
+      const cur = pubSnap.val().playerCount || 1;
+      await pubRef.update({ playerCount: Math.max(0, cur - 1) }).catch(() => {});
+    }
+  }
   if (mpTableRef) { mpTableRef.off(); mpTableRef = null; }
   mpTableId = null; mpIsHost = false;
   document.getElementById('mp-waiting').style.display = 'none';
@@ -3628,6 +3650,9 @@ async function startMultiplayerGame() {
     dealerIdx: 0,
     hand: 0,
   });
+
+  // Table is no longer joinable — pull it from the public listing
+  await rtdb.ref('publicTables/' + mpTableId).remove().catch(() => {});
 
   // Host starts immediately with current table data
   const snap = await rtdb.ref('tables/' + mpTableId).once('value');
@@ -3873,7 +3898,9 @@ function renderMPState(s, players) {
     const uid = el.dataset.mpUid;
     if (s.chips && s.chips[uid] !== undefined) {
       const sp = el.querySelector('.seat-chips span:not(.chip-spacer)');
-      if (sp) sp.textContent = fmt(parseInt(s.chips[uid]) || 0);
+      const chipVal = parseInt(s.chips[uid]) || 0;
+      const isAllin = !!(s.allin && s.allin[uid]) && !(s.folded && s.folded[uid]);
+      if (sp) sp.textContent = (isAllin && chipVal === 0) ? 'All In' : fmt(chipVal);
     }
     if (s.folded && s.folded[uid]) el.classList.add('folded');
     else el.classList.remove('folded');
@@ -3882,7 +3909,8 @@ function renderMPState(s, players) {
   // Update player chips
   if (s.chips && s.chips[mpMyUid] !== undefined) {
     _playerChips = s.chips[mpMyUid];
-    document.getElementById('chips-player').textContent = fmt(_playerChips);
+    const myAllin = !!(s.allin && s.allin[mpMyUid]) && !(s.folded && s.folded[mpMyUid]);
+    document.getElementById('chips-player').textContent = (myAllin && _playerChips === 0) ? 'All In' : fmt(_playerChips);
   }
 
   // Community cards — Firebase may return as object
@@ -4049,6 +4077,17 @@ async function mpProcessAction(actionData) {
     newState.toAct  = [];
   } else if (canAct.length === 0) {
     newState = await mpAdvancePhase(newState);
+    // If everyone left in the hand is all-in, nobody will ever submit another
+    // action to trigger the next street — so keep dealing automatically until
+    // we hit showdown (or only one player remains).
+    let guard = 0;
+    while (newState.phase !== 'showdown' && newState.phase !== 'ended' && guard < 10) {
+      const activeStill = newState.activePids.filter(p => !newState.folded[p]);
+      const canActStill = newState.toAct.filter(p => !newState.folded[p] && !newState.allin[p]);
+      if (activeStill.length <= 1 || canActStill.length > 0) break;
+      newState = await mpAdvancePhase(newState);
+      guard++;
+    }
   }
 
   // Update local mpState so next action processes correctly
