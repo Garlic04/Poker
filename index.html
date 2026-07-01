@@ -2580,6 +2580,7 @@ function getBetAmount() {
 function showPlayerControls(visible) {
   state.playerTurn = visible;
   const allBtns = ['btn-fold','btn-check','btn-call','btn-raise'];
+  console.log('showPlayerControls:', visible, '_pendingCashOut=', _pendingCashOut, '_mpPendingCashOut=', typeof _mpPendingCashOut !== 'undefined' ? _mpPendingCashOut : 'n/a');
 
   // Always disable if not visible OR if cashing out
   if (!visible || _pendingCashOut) {
@@ -3117,6 +3118,7 @@ function confirmBuyin() {
 let _pendingCashOut = false;
 
 function requestCashOut() {
+  if (mpTableId) { mpRequestCashOut(); return; }
   _pendingCashOut = true;
   const btn = document.getElementById('btn-leave');
   btn.textContent = 'Cashing Out...';
@@ -3133,6 +3135,48 @@ function requestCashOut() {
   if (state.playerTurn) {
     playerAction('fold');
   }
+}
+
+// ── Multiplayer cash out: finish the current hand, then return chips to
+// bankroll and leave the table (instead of getting permanently stuck, which
+// happened before because this button was wired straight into the
+// singleplayer-only cash-out flow).
+function mpRequestCashOut() {
+  if (_mpPendingCashOut) return;
+  _mpPendingCashOut = true;
+  const btn = document.getElementById('btn-leave');
+  btn.textContent = 'Cashing Out...';
+  btn.disabled = true;
+
+  showPlayerControls(false);
+
+  // If it's currently our turn, auto-fold so the hand can finish
+  const toAct = mpState && (Array.isArray(mpState.toAct) ? mpState.toAct : Object.values(mpState.toAct || {}));
+  if (toAct && toAct[0] === mpMyUid) {
+    mpSubmitAction('fold', 0);
+  }
+}
+
+async function mpFinishCashOut(s) {
+  if (_mpCashOutInProgress) return;
+  _mpCashOutInProgress = true;
+  const myChips = parseInt((s.chips && s.chips[mpMyUid]) || 0) || 0;
+  bankroll += myChips;
+  saveBankroll();
+  try {
+    if (mpIsHost) {
+      // Host leaving mid-game closes the table for everyone — full host
+      // hand-off isn't implemented yet, so this is the safe stop-gap.
+      await rtdb.ref('tables/' + mpTableId).remove();
+    } else {
+      await rtdb.ref('tables/' + mpTableId + '/players/' + mpMyUid).remove();
+    }
+  } catch (e) { console.error('mpFinishCashOut error:', e); }
+  _mpPendingCashOut = false;
+  _mpCashOutInProgress = false;
+  const btn = document.getElementById('btn-leave');
+  if (btn) { btn.textContent = 'Cash Out'; btn.disabled = false; }
+  mpLeaveGame();
 }
 
 function leaveTable() {
@@ -3286,6 +3330,8 @@ if (auth) { auth.onAuthStateChanged(async user => {
 
 let mpMode = 'solo'; // 'solo' | 'multi'
 let mpTableId = null;
+let _mpPendingCashOut = false;
+let _mpCashOutInProgress = false;
 let mpTableRef = null;
 let mpIsHost = false;
 let mpTableVisibility = 'public';
@@ -3683,6 +3729,8 @@ function startMPGame(tableData) {
   mpMyUid = currentUser.uid;
   _mpHandEndedCalled = false;
   _mpDealingHand = false;
+  _mpPendingCashOut = false;
+  _mpCashOutInProgress = false;
 
   const cfg = tableData.config;
   const players = tableData.players || {};
@@ -3937,17 +3985,29 @@ function renderMPState(s, players) {
 
   // Status and turn
   const toAct = Array.isArray(s.toAct) ? s.toAct : Object.values(s.toAct || {});
+  console.log('renderMPState: phase=', s.phase, 'toAct=', toAct, 'mpMyUid=', mpMyUid, 'mpIsHost=', mpIsHost);
   if (toAct.length > 0) {
     const nextUid = toAct[0];
     const name = nextUid === mpMyUid ? 'Your turn' : ((players[nextUid]?.publicInfo?.name || 'Player') + '\'s turn');
     setStatus(name + '...');
     if (nextUid === mpMyUid) showMPControls(s);
     else showPlayerControls(false);
+  } else {
+    // No one left to act — hand is over (or between streets). Never leave
+    // stale action buttons clickable.
+    showPlayerControls(false);
   }
 
   // Phase label
   const phaseLabels = { flop: '— Flop —', turn: '— Turn —', river: '— River —' };
   if (phaseLabels[s.phase]) setStatus(phaseLabels[s.phase]);
+  if (s.phase === 'between_hands' && s.resultMsg) setStatus(s.resultMsg);
+  else if (s.phase === 'ended' || s.phase === 'showdown') setStatus('Hand over...');
+
+  // If we requested a cash-out, leave now that this hand's chips are final
+  if (_mpPendingCashOut && s.phase === 'between_hands') {
+    mpFinishCashOut(s);
+  }
 
   // Check if hand ended — only trigger once
   if ((s.phase === 'showdown' || s.phase === 'ended') && !_mpHandEndedCalled) {
@@ -3975,18 +4035,30 @@ function renderMPMyCards(cardData) {
 
 // ── Show action controls for MP (my turn)
 function showMPControls(s) {
-  const toCall = (s.highBet || 0) - (s.bets?.[mpMyUid] || 0);
+  const myBet = (s.bets && s.bets[mpMyUid]) || 0;
   state.minBet = s.lastRaiseSize || (s.highBet || 200);
   state.highBet = s.highBet || 0;
-  state.bets = s.bets || {};
+  // toCallAmount()/getChips() key off PLAYER_ID ('player'), but MP bets are
+  // keyed by real Firebase uids — without this, the Big Blind's "check"
+  // option was wrongly treated as still owing a call.
+  state.bets = { ...(s.bets || {}), [PLAYER_ID]: myBet };
   state.allin = new Set(Object.keys(s.allin || {}));
   state.playerTurn = true;
+  console.log('showMPControls: myBet=', myBet, 'highBet=', state.highBet, 'myChips=', _playerChips, 'phase=', s.phase);
   showPlayerControls(true);
 }
 
 // ── Player submits action (non-host writes to actions path)
 function mpSubmitAction(action, amount) {
   if (!rtdb || !mpTableId || !mpMyUid) return;
+  // Defensive check: only actually the local player's turn should be able
+  // to submit — stops stale/leftover button clicks from firing bogus actions.
+  const toAct = mpState && (Array.isArray(mpState.toAct) ? mpState.toAct : Object.values(mpState.toAct || {}));
+  if (!toAct || toAct[0] !== mpMyUid) {
+    console.warn('mpSubmitAction: not your turn, ignoring click');
+    showPlayerControls(false);
+    return;
+  }
   rtdb.ref(`tables/${mpTableId}/actions/${mpMyUid}`).set({
     uid: mpMyUid,
     action,
@@ -4070,6 +4142,7 @@ async function mpProcessAction(actionData) {
   // Check if betting round is over
   const active    = newState.activePids.filter(p => !folded[p]);
   const canAct    = newState.toAct.filter(p => !folded[p] && !allin[p]);
+  console.log('mpProcessAction:', action, 'by', uid, '| active:', active, '| canAct:', canAct, '| toAct:', newState.toAct, '| phase:', newState.phase);
 
   if (active.length === 1) {
     newState.phase  = 'ended';
@@ -4146,6 +4219,8 @@ function mpHandEnded(s, players) {
 
   setTimeout(async () => {
     let winnerUid = s.winner;
+    let handName = '';
+    const handNames = ['High Card','Pair','Two Pair','Three of a Kind','Straight','Flush','Full House','Four of a Kind','Straight Flush','Royal Flush'];
 
     if (!winnerUid && s.phase === 'showdown') {
       // Fetch all private cards from Firebase to evaluate hands
@@ -4170,6 +4245,7 @@ function mpHandEnded(s, players) {
         console.log(uid, 'hand score:', score);
         if (score > bestScore) { bestScore = score; winnerUid = uid; }
       });
+      if (bestScore >= 0) handName = handNames[Math.min(Math.floor(bestScore / 1e12), 9)] || '';
     }
 
     if (!winnerUid) {
@@ -4180,6 +4256,9 @@ function mpHandEnded(s, players) {
 
     console.log('Winner:', winnerUid, 'pot:', s.pot);
 
+    const winnerName = (players[winnerUid] && players[winnerUid].publicInfo && players[winnerUid].publicInfo.name) || 'Player';
+    const resultMsg = '🏆 ' + winnerName + ' Wins! ' + (handName ? '(' + handName + ') ' : '') + fmt(s.pot || 0) + ' GP';
+
     // Award pot
     const chips = typeof s.chips === 'object' ? s.chips : {};
     const newChips = { ...chips };
@@ -4187,7 +4266,7 @@ function mpHandEnded(s, players) {
 
     // Write winner state
     await rtdb.ref(`tables/${mpTableId}/state`).update({
-      chips: newChips, pot: 0, phase: 'between_hands', winner: winnerUid, toAct: []
+      chips: newChips, pot: 0, phase: 'between_hands', winner: winnerUid, toAct: [], resultMsg
     });
 
     // Update chips in player publicInfo
