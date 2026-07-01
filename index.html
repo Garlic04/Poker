@@ -3774,11 +3774,14 @@ function setupMPSeats(players, cfg) {
 
 // ── Host deals a new hand
 async function mpDealNewHand(tableData) {
+  console.log("mpDealNewHand called", tableData ? "with data" : "NO DATA");
   const players = tableData.players || {};
+  try {
   const activePids = Object.keys(players).filter(uid => {
-    return (players[uid].publicInfo.chips || 0) > 0;
+    return parseInt(players[uid].publicInfo?.chips || 0) > 0;
   });
-  if (activePids.length < 2) { mpEndGame(); return; }
+  console.log("mpDealNewHand: activePids=", activePids, "players=", JSON.stringify(Object.keys(players)));
+  if (activePids.length < 2) { console.error("Not enough players with chips", activePids); return; }
 
   // Build and shuffle deck
   const deck = buildDeck();
@@ -3841,6 +3844,8 @@ async function mpDealNewHand(tableData) {
   };
 
   await rtdb.ref(`tables/${mpTableId}/state`).set(newState);
+  console.log("mpDealNewHand: state written successfully");
+  } catch(e) { console.error("mpDealNewHand error:", e); }
 }
 
 function getPreFlopOrder(pids, bbIdx) {
