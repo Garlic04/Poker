@@ -3490,12 +3490,15 @@ async function joinTable(tableId) {
 function listenPublicTables() {
   if (!rtdb) return;
   stopListeningPublicTables();
-  mpPublicTablesRef = rtdb.ref('tables'); // client-side filter for public tables
+  mpPublicTablesRef = rtdb.ref('tables');
   mpPublicTablesRef.on('value', snap => {
     const list = document.getElementById('mp-tables-list');
     const empty = document.getElementById('mp-tables-empty');
     const tables = snap.val() || {};
-    const waiting = Object.entries(tables).filter(([id, t]) => t.state && t.state.phase === 'waiting');
+    const waiting = Object.entries(tables).filter(([id, t]) =>
+      t.state && t.state.phase === 'waiting' &&
+      t.config && t.config.visibility === 'public'
+    );
     if (waiting.length === 0) {
       list.innerHTML = '';
       empty.style.display = 'block';
