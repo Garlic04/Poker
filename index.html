@@ -3490,7 +3490,7 @@ async function joinTable(tableId) {
 function listenPublicTables() {
   if (!rtdb) return;
   stopListeningPublicTables();
-  mpPublicTablesRef = rtdb.ref('tables').orderByChild('config/visibility').equalTo('public');
+  mpPublicTablesRef = rtdb.ref('tables'); // client-side filter for public tables
   mpPublicTablesRef.on('value', snap => {
     const list = document.getElementById('mp-tables-list');
     const empty = document.getElementById('mp-tables-empty');
@@ -3540,15 +3540,19 @@ function enterWaitingRoom(tableId, isHost) {
   document.getElementById('btn-mp-start').style.display = isHost ? '' : 'none';
 
   // Listen to table
+  let _mpGameStarted = false;
   mpTableRef = rtdb.ref('tables/' + tableId);
   mpTableListener = mpTableRef.on('value', snap => {
     if (!snap.exists()) { leaveWaitingRoom(); return; }
     const data = snap.val();
     mpPlayers = data.players || {};
-    renderWaitingRoom(data);
-    if (data.state && data.state.phase === 'playing') {
+    if (data.state && data.state.phase === 'playing' && !_mpGameStarted) {
+      _mpGameStarted = true;
+      mpTableRef.off(); // stop waiting room listener before starting game
       startMPGame(data);
+      return;
     }
+    if (!_mpGameStarted) renderWaitingRoom(data);
   });
 
   // Set up presence/disconnect
