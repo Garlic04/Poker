@@ -3718,6 +3718,14 @@ let mpSeats  = [];       // ordered array of uids
 let mpActionRef = null;  // ref to write my actions
 let mpStateRef  = null;  // ref to listen to state
 let mpDisconnectRef = null;
+let _mpPrevBets = {};           // for detecting bet->pot coin animations
+let _mpPrevPhase = null;
+let _mpWinnerAnimatedForHand = null; // hand number we've already animated pot->winner for
+
+function mpSeatElIdFor(uid) {
+  const el = document.querySelector('.seat[data-mp-uid="' + uid + '"]');
+  return el ? el.id : null;
+}
 
 const MP_TIMEOUT = 45000;
 let mpTimeoutTimers = {}; // uid -> setTimeout id
@@ -3731,6 +3739,9 @@ function startMPGame(tableData) {
   _mpDealingHand = false;
   _mpPendingCashOut = false;
   _mpCashOutInProgress = false;
+  _mpPrevBets = {};
+  _mpPrevPhase = null;
+  _mpWinnerAnimatedForHand = null;
 
   const cfg = tableData.config;
   const players = tableData.players || {};
@@ -3959,6 +3970,29 @@ function renderMPState(s, players) {
     _playerChips = s.chips[mpMyUid];
     const myAllin = !!(s.allin && s.allin[mpMyUid]) && !(s.folded && s.folded[mpMyUid]);
     document.getElementById('chips-player').textContent = (myAllin && _playerChips === 0) ? 'All In' : fmt(_playerChips);
+  }
+
+  // Coin animation: seat -> pot whenever a bet increases (blinds, calls, raises).
+  // Reset the comparison baseline whenever the phase changes so we're only
+  // ever comparing bets within the same street/hand.
+  if (s.phase !== _mpPrevPhase) _mpPrevBets = {};
+  const curBets = s.bets || {};
+  Object.keys(curBets).forEach(uid => {
+    const newBet = parseInt(curBets[uid]) || 0;
+    const oldBet = parseInt(_mpPrevBets[uid]) || 0;
+    if (newBet > oldBet) {
+      const seatId = mpSeatElIdFor(uid);
+      if (seatId) animateCoinToPot(seatId);
+    }
+  });
+  _mpPrevBets = { ...curBets };
+  _mpPrevPhase = s.phase;
+
+  // Coin animation: pot -> winner, once per hand, right when the hand resolves
+  if (s.phase === 'between_hands' && s.winner && s.hand !== _mpWinnerAnimatedForHand) {
+    _mpWinnerAnimatedForHand = s.hand;
+    const winnerSeatId = mpSeatElIdFor(s.winner);
+    if (winnerSeatId) animatePotToWinner(winnerSeatId, () => {});
   }
 
   // Community cards — Firebase may return as object
