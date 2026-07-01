@@ -3656,6 +3656,8 @@ function startMPGame(tableData) {
   document.getElementById('mp-waiting').style.display = 'none';
   document.getElementById('game-container').classList.remove('lobby-active');
   mpMyUid = currentUser.uid;
+  _mpHandEndedCalled = false;
+  _mpDealingHand = false;
 
   const cfg = tableData.config;
   const players = tableData.players || {};
