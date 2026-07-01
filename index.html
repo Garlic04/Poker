@@ -3606,12 +3606,513 @@ async function startMultiplayerGame() {
 }
 
 // ── Client receives game start signal
-function startMPGame(data) {
+// ============================================================
+// MULTIPLAYER GAME LOOP
+// ============================================================
+
+let mpState = null;      // local copy of shared state
+let mpMyUid  = null;
+let mpSeats  = [];       // ordered array of uids
+let mpActionRef = null;  // ref to write my actions
+let mpStateRef  = null;  // ref to listen to state
+let mpDisconnectRef = null;
+
+const MP_TIMEOUT = 45000;
+let mpTimeoutTimers = {}; // uid -> setTimeout id
+let mpCountdownIntervals = {}; // uid -> setInterval id
+
+function startMPGame(tableData) {
   document.getElementById('mp-waiting').style.display = 'none';
-  // TODO: full multiplayer game loop
-  // For now show a placeholder
-  alert('Multiplayer game starting! Full game loop coming soon.');
+  document.getElementById('game-container').classList.remove('lobby-active');
+  mpMyUid = currentUser.uid;
+
+  const cfg = tableData.config;
+  const players = tableData.players || {};
+  mpSeats = Object.keys(players).sort((a,b) =>
+    (players[a].publicInfo.joinedAt||0) - (players[b].publicInfo.joinedAt||0)
+  );
+
+  // Set up real player seat mapping
+  // Map mp seat positions to game seat ids
+  setupMPSeats(players, cfg);
+
+  if (mpIsHost) {
+    mpDealNewHand(tableData);
+  }
+
+  // Listen for state changes
+  mpStateRef = rtdb.ref('tables/' + mpTableId + '/state');
+  mpStateRef.on('value', snap => {
+    if (!snap.exists()) { mpLeaveGame(); return; }
+    const s = snap.val();
+    mpState = s;
+    renderMPState(s, players);
+  });
+
+  // Listen for actions (host only processes them)
+  if (mpIsHost) {
+    rtdb.ref('tables/' + mpTableId + '/actions').on('child_added', snap => {
+      mpProcessAction(snap.val());
+    });
+  }
+
+  // Listen for private cards
+  rtdb.ref('tables/' + mpTableId + '/players/' + mpMyUid + '/privateCards').on('value', snap => {
+    if (snap.exists()) renderMPMyCards(snap.val());
+  });
+
+  // Listen for player disconnections
+  rtdb.ref('tables/' + mpTableId + '/players').on('child_changed', snap => {
+    const uid = snap.key;
+    const info = snap.val()?.publicInfo;
+    if (info && info.connected === false) mpHandleDisconnect(uid);
+  });
+
+  // Set up disconnect handler for self
+  rtdb.ref('tables/' + mpTableId + '/players/' + mpMyUid + '/publicInfo/connected')
+    .onDisconnect().set(false);
 }
+
+// ── Seat setup: map real players to seat positions around the table
+function setupMPSeats(players, cfg) {
+  const myIdx = mpSeats.indexOf(mpMyUid);
+  // Reorder so local player is always "player" seat
+  const reordered = [...mpSeats.slice(myIdx), ...mpSeats.slice(0, myIdx)];
+
+  // Hide all AI seats, show game table
+  document.querySelectorAll('.seat').forEach(s => s.style.display = 'none');
+  document.getElementById('seat-player').style.display = '';
+
+  // Available seat ids (not including player)
+  const seatIds = ['seat-0','seat-1','seat-2','seat-3','seat-4'];
+
+  reordered.forEach((uid, i) => {
+    if (uid === mpMyUid) {
+      // Update player seat with real info
+      const p = players[uid].publicInfo;
+      const frame = document.getElementById('avatar-player');
+      frame.innerHTML = p.photo
+        ? `<img src="${p.photo}" style="width:100%;height:100%;border-radius:50%;object-fit:cover;">`
+        : '🧑';
+      document.querySelector('#seat-player .seat-name').textContent = 'You';
+      document.getElementById('chips-player').textContent = fmt(p.chips);
+      _playerChips = p.chips;
+    } else if (i < seatIds.length + 1) {
+      const seatIdx = i - 1; // skip seat 0 (player)
+      if (seatIdx < 0 || seatIdx >= seatIds.length) return;
+      const seatEl = document.getElementById(seatIds[seatIdx]);
+      if (!seatEl) return;
+      seatEl.style.display = '';
+      const p = players[uid].publicInfo;
+      const rank = getRank(p.chips || 0);
+      seatEl.querySelector('.avatar-frame').innerHTML = p.photo
+        ? `<img src="${p.photo}" style="width:100%;height:100%;border-radius:50%;object-fit:cover;">`
+        : '🧑';
+      seatEl.querySelector('.seat-name').textContent = p.name || 'Player';
+      seatEl.querySelector('.seat-chips span').textContent = fmt(p.chips || 0);
+      seatEl.dataset.mpUid = uid;
+    }
+  });
+}
+
+// ── Host deals a new hand
+async function mpDealNewHand(tableData) {
+  const players = tableData.players || {};
+  const activePids = Object.keys(players).filter(uid => {
+    return (players[uid].publicInfo.chips || 0) > 0;
+  });
+  if (activePids.length < 2) { mpEndGame(); return; }
+
+  // Build and shuffle deck
+  const deck = buildDeck();
+  shuffle(deck);
+
+  // Deal 2 cards to each player privately
+  const hands = {};
+  activePids.forEach(uid => {
+    hands[uid] = [deck.pop(), deck.pop()];
+  });
+
+  // Write each player's cards to their private path
+  const writes = activePids.map(uid =>
+    rtdb.ref(`tables/${mpTableId}/players/${uid}/privateCards`).set({
+      c1: hands[uid][0],
+      c2: hands[uid][1]
+    })
+  );
+  await Promise.all(writes);
+
+  // Get dealer/blind positions from current state
+  const curState = tableData.state || {};
+  const dealerIdx = ((curState.dealerIdx || 0) + 1) % activePids.length;
+  const sbIdx = (dealerIdx + 1) % activePids.length;
+  const bbIdx = (dealerIdx + 2) % activePids.length;
+  const sbUid = activePids[sbIdx];
+  const bbUid = activePids[bbIdx];
+  const cfg   = tableData.config;
+  const bb    = cfg.blinds;
+  const sb    = bb / 2;
+
+  // Post blinds
+  const chips = {};
+  activePids.forEach(uid => {
+    chips[uid] = players[uid].publicInfo.chips || 0;
+  });
+  const sbBet  = Math.min(sb, chips[sbUid]);
+  const bbBet  = Math.min(bb, chips[bbUid]);
+  chips[sbUid] -= sbBet;
+  chips[bbUid] -= bbBet;
+
+  // Write new shared state
+  const newState = {
+    phase: 'preflop',
+    hand: (curState.hand || 0) + 1,
+    dealerIdx,
+    dealerUid:  activePids[dealerIdx],
+    sbUid, bbUid,
+    pot: sbBet + bbBet,
+    bets: { [sbUid]: sbBet, [bbUid]: bbBet },
+    chips,
+    community: [],
+    activePids,
+    folded: {},
+    allin: {},
+    toAct: getPreFlopOrder(activePids, bbIdx),
+    highBet: bbBet,
+    deck: deck.map(c => c.rank + c.suit), // remaining deck for community cards
+    lastRaiseSize: bb,
+  };
+
+  await rtdb.ref(`tables/${mpTableId}/state`).set(newState);
+}
+
+function getPreFlopOrder(pids, bbIdx) {
+  // Action starts left of BB
+  const start = (bbIdx + 1) % pids.length;
+  const order = [];
+  for (let i = 0; i < pids.length; i++) {
+    order.push(pids[(start + i) % pids.length]);
+  }
+  return order;
+}
+
+// ── Render shared state for all clients
+function renderMPState(s, players) {
+  if (!s) return;
+
+  // Update chips display for all seats
+  document.querySelectorAll('.seat[data-mp-uid]').forEach(el => {
+    const uid = el.dataset.mpUid;
+    if (s.chips && s.chips[uid] !== undefined) {
+      el.querySelector('.seat-chips span').textContent = fmt(s.chips[uid]);
+    }
+    if (s.folded && s.folded[uid]) el.classList.add('folded');
+    else el.classList.remove('folded');
+  });
+
+  // Update player chips
+  if (s.chips && s.chips[mpMyUid] !== undefined) {
+    _playerChips = s.chips[mpMyUid];
+    document.getElementById('chips-player').textContent = fmt(_playerChips);
+  }
+
+  // Community cards
+  if (s.community) {
+    const area = document.getElementById('community-area');
+    area.innerHTML = '';
+    (s.community || []).forEach(c => {
+      const [rank, suit] = [c.slice(0,-1), c.slice(-1)];
+      const div = document.createElement('div');
+      div.className = 'community-card' + (suit==='♥'||suit==='♦' ? ' red' : '');
+      div.innerHTML = `<span>${rank}</span><span>${suit}</span>`;
+      area.appendChild(div);
+    });
+  }
+
+  // Pot
+  document.getElementById('pot-label').textContent = fmt(s.pot || 0);
+
+  // Status
+  const toAct = s.toAct || [];
+  if (toAct.length > 0) {
+    const nextUid = toAct[0];
+    const name = nextUid === mpMyUid ? 'Your turn' : ((players[nextUid]?.publicInfo?.name || 'Player') + '\'s turn');
+    setStatus(name + '...');
+    if (nextUid === mpMyUid) showMPControls(s);
+    else showPlayerControls(false);
+  }
+
+  // Phase label
+  const labels = { preflop: '', flop: '— Flop —', turn: '— Turn —', river: '— River —' };
+  if (labels[s.phase]) setStatus(labels[s.phase]);
+
+  // Check if hand ended
+  if (s.phase === 'showdown' || s.phase === 'ended') {
+    mpHandEnded(s, players);
+  }
+}
+
+// ── Render my private cards
+function renderMPMyCards(cardData) {
+  const hud = document.getElementById('hud-cards-inner');
+  if (!hud) return;
+  hud.innerHTML = '';
+  if (!cardData) return;
+  const cards = [cardData.c1, cardData.c2].filter(Boolean);
+  cards.forEach(c => {
+    const suit = c.slice(-1);
+    const rank = c.slice(0, -1);
+    const isRed = suit === '♥' || suit === '♦';
+    const div = document.createElement('div');
+    div.className = 'player-card' + (isRed ? ' red' : '');
+    div.innerHTML = `<div class="pc-rank">${rank}</div><div class="pc-suit">${suit}</div><div class="pc-rank-bot">${rank}</div>`;
+    hud.appendChild(div);
+  });
+}
+
+// ── Show action controls for MP (my turn)
+function showMPControls(s) {
+  const toCall = (s.highBet || 0) - (s.bets?.[mpMyUid] || 0);
+  state.minBet = s.lastRaiseSize || (s.highBet || 200);
+  state.highBet = s.highBet || 0;
+  state.bets = s.bets || {};
+  state.allin = new Set(Object.keys(s.allin || {}));
+  state.playerTurn = true;
+  showPlayerControls(true);
+}
+
+// ── Player submits action (non-host writes to actions path)
+function mpSubmitAction(action, amount) {
+  if (!rtdb || !mpTableId || !mpMyUid) return;
+  rtdb.ref(`tables/${mpTableId}/actions/${mpMyUid}`).set({
+    uid: mpMyUid,
+    action,
+    amount: amount || 0,
+    timestamp: firebase.database.ServerValue.TIMESTAMP
+  });
+  showPlayerControls(false);
+}
+
+// ── Override playerAction for MP
+const _origPlayerAction = playerAction;
+function playerAction(action) {
+  if (mpTableId) {
+    // MP mode — submit action to Firebase
+    let amount = 0;
+    if (action === 'bet' || action === 'raise' || action === 'call') {
+      amount = getBetAmount();
+    }
+    mpSubmitAction(action, amount);
+  } else {
+    _origPlayerAction(action);
+  }
+}
+
+// ── Host processes incoming actions
+async function mpProcessAction(actionData) {
+  if (!mpIsHost || !mpState) return;
+  const { uid, action, amount } = actionData;
+
+  // Verify it's this player's turn
+  const toAct = mpState.toAct || [];
+  if (toAct[0] !== uid) return;
+
+  let newState = JSON.parse(JSON.stringify(mpState));
+  const chips = newState.chips;
+  const bets  = newState.bets || {};
+  const highBet = newState.highBet || 0;
+
+  if (action === 'fold') {
+    newState.folded[uid] = true;
+    newState.toAct.shift();
+  } else if (action === 'check') {
+    newState.toAct.shift();
+  } else if (action === 'call') {
+    const toCall = Math.min(highBet - (bets[uid]||0), chips[uid]);
+    chips[uid] -= toCall;
+    bets[uid]   = (bets[uid]||0) + toCall;
+    newState.pot += toCall;
+    if (chips[uid] === 0) newState.allin[uid] = true;
+    newState.toAct.shift();
+  } else if (action === 'bet' || action === 'raise') {
+    const bet = Math.min(amount, chips[uid]);
+    const prev = bets[uid] || 0;
+    chips[uid] -= (bet - prev);
+    newState.pot += (bet - prev);
+    bets[uid] = bet;
+    newState.highBet = bet;
+    newState.lastRaiseSize = bet - prev;
+    if (chips[uid] === 0) newState.allin[uid] = true;
+    // Re-open action to others
+    const remaining = newState.activePids.filter(p =>
+      !newState.folded[p] && !newState.allin[p] && p !== uid
+    );
+    newState.toAct = [...remaining, ...newState.toAct.slice(1)];
+  }
+
+  // Clear processed action
+  await rtdb.ref(`tables/${mpTableId}/actions/${uid}`).remove();
+
+  // Check if betting round is over
+  const active = newState.activePids.filter(p => !newState.folded[p]);
+  const nonAllin = active.filter(p => !newState.allin[p]);
+
+  if (active.length === 1) {
+    // Everyone folded — award pot
+    newState.phase = 'ended';
+    newState.winner = active[0];
+    newState.toAct = [];
+  } else if (newState.toAct.filter(p => !newState.folded[p] && !newState.allin[p]).length === 0) {
+    // Betting round over — advance phase
+    newState = await mpAdvancePhase(newState);
+  }
+
+  newState.bets = bets;
+  newState.chips = chips;
+  await rtdb.ref(`tables/${mpTableId}/state`).set(newState);
+}
+
+async function mpAdvancePhase(s) {
+  const deck = s.deck || [];
+  if (s.phase === 'preflop') {
+    s.community = [deck.pop(), deck.pop(), deck.pop()];
+    s.phase = 'flop';
+  } else if (s.phase === 'flop') {
+    s.community.push(deck.pop());
+    s.phase = 'turn';
+  } else if (s.phase === 'turn') {
+    s.community.push(deck.pop());
+    s.phase = 'river';
+  } else if (s.phase === 'river') {
+    s.phase = 'showdown';
+  }
+  // Reset bets for new street
+  s.bets = {};
+  s.highBet = 0;
+  s.lastRaiseSize = s.lastRaiseSize; // keep min raise
+  const active = s.activePids.filter(p => !s.folded[p] && !s.allin[p]);
+  const sbIdx  = s.activePids.indexOf(s.sbUid);
+  // Action starts from first active player left of dealer
+  s.toAct = active;
+  return s;
+}
+
+function mpHandEnded(s, players) {
+  if (!mpIsHost) return;
+  // Award pot
+  setTimeout(async () => {
+    let winnerUid = s.winner;
+    if (!winnerUid && s.phase === 'showdown') {
+      // Evaluate hands
+      const community = (s.community || []).map(c => ({ rank: c.slice(0,-1), suit: c.slice(-1) }));
+      const active = s.activePids.filter(p => !s.folded[p]);
+      let bestScore = -1;
+      active.forEach(uid => {
+        const cards = players[uid]?.publicInfo?.hand || [];
+        if (cards.length < 2) return;
+        const hand = cards.map(c => ({ rank: c.slice(0,-1), suit: c.slice(-1) }));
+        const score = getBestHandScore([...hand, ...community]);
+        if (score > bestScore) { bestScore = score; winnerUid = uid; }
+      });
+    }
+    if (!winnerUid) return;
+
+    // Award pot to winner
+    const newChips = { ...s.chips };
+    newChips[winnerUid] = (newChips[winnerUid] || 0) + s.pot;
+
+    // Update bankrolls in Firestore for each player
+    const updates = {};
+    Object.keys(newChips).forEach(uid => { updates[uid] = newChips[uid]; });
+
+    await rtdb.ref(`tables/${mpTableId}/state`).update({
+      chips: newChips, pot: 0, phase: 'between_hands', winner: winnerUid
+    });
+
+    // Start next hand after delay
+    setTimeout(async () => {
+      const snap = await rtdb.ref('tables/' + mpTableId).once('value');
+      if (snap.exists()) {
+        const data = snap.val();
+        // Update chips in players publicInfo
+        const chipUpdates = {};
+        Object.keys(newChips).forEach(uid => {
+          chipUpdates[`tables/${mpTableId}/players/${uid}/publicInfo/chips`] = newChips[uid];
+        });
+        await rtdb.ref().update(chipUpdates);
+        await mpDealNewHand({ ...data, players: data.players });
+      }
+    }, 3000);
+  }, 1500);
+}
+
+// ── Handle disconnection
+function mpHandleDisconnect(uid) {
+  if (mpTimeoutTimers[uid]) return; // already counting down
+  let remaining = MP_TIMEOUT / 1000;
+  mpCountdownIntervals[uid] = setInterval(() => {
+    remaining--;
+    showDisconnectTimer(uid, remaining);
+    if (remaining <= 0) {
+      clearInterval(mpCountdownIntervals[uid]);
+      delete mpCountdownIntervals[uid];
+      mpAutoFoldDisconnected(uid);
+    }
+  }, 1000);
+}
+
+function showDisconnectTimer(uid, seconds) {
+  // Find seat for this uid
+  const seatEl = document.querySelector(`.seat[data-mp-uid="${uid}"]`);
+  if (!seatEl) return;
+  let timer = seatEl.querySelector('.disconnect-timer');
+  if (!timer) {
+    timer = document.createElement('div');
+    timer.className = 'disconnect-timer';
+    seatEl.appendChild(timer);
+  }
+  timer.textContent = `Disconnected ${seconds}s`;
+  if (seconds <= 0) timer.remove();
+}
+
+async function mpAutoFoldDisconnected(uid) {
+  if (!mpIsHost) return;
+  // Cash out their chips to their bankroll in Firestore
+  const chips = mpState?.chips?.[uid] || 0;
+  if (chips > 0 && db) {
+    await db.collection('players').doc(uid).update({
+      bankroll: firebase.firestore.FieldValue.increment(chips)
+    });
+  }
+  // Remove from table and fold them
+  await rtdb.ref(`tables/${mpTableId}/players/${uid}`).remove();
+  if (mpState && mpState.toAct && mpState.toAct[0] === uid) {
+    await mpProcessAction({ uid, action: 'fold', amount: 0 });
+  }
+}
+
+// ── Leave multiplayer game
+function mpLeaveGame() {
+  if (mpStateRef) { mpStateRef.off(); mpStateRef = null; }
+  if (mpTableRef) { mpTableRef.off(); mpTableRef = null; }
+  Object.values(mpTimeoutTimers).forEach(clearTimeout);
+  Object.values(mpCountdownIntervals).forEach(clearInterval);
+  mpTimeoutTimers = {}; mpCountdownIntervals = {};
+  mpTableId = null; mpIsHost = false; mpMyUid = null;
+  // Restore AI seats
+  document.querySelectorAll('.seat').forEach(s => { s.style.display = ''; s.dataset.mpUid = ''; });
+  showLobby();
+}
+
+// ── Helper: build deck as objects
+function buildDeck() {
+  const suits = ['♠','♥','♦','♣'];
+  const ranks = ['2','3','4','5','6','7','8','9','10','J','Q','K','A'];
+  const deck = [];
+  for (let s of suits) for (let r of ranks) deck.push({ rank: r, suit: s });
+  return deck;
+}
+
 
 // ============================================================
 // RESPONSIVE SCALING
