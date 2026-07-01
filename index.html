@@ -9,15 +9,20 @@
 
   * { box-sizing: border-box; margin: 0; padding: 0; }
 
+  html, body {
+    width: 100%; height: 100%;
+    overflow: hidden;
+  }
+
   body {
     background: #1a0a00;
     font-family: Verdana, Geneva, sans-serif;
     display: flex;
-    flex-direction: column;
     align-items: center;
     justify-content: center;
-    min-height: 100vh;
-    overflow: auto;
+    width: 100vw;
+    height: 100vh;
+    overflow: hidden;
   }
 
   #game-container {
@@ -29,6 +34,9 @@
     border-radius: 16px;
     box-shadow: 0 0 0 4px #5a3a08, 0 0 0 8px #8B5E1A, 0 10px 40px rgba(0,0,0,0.8);
     overflow: hidden;
+    /* Scale to fit viewport while preserving aspect ratio */
+    transform-origin: center center;
+    transform: scale(var(--game-scale, 1));
   }
 
   /* Wood grain border effect */
@@ -597,7 +605,7 @@
   }
   .lobby-table:hover:not(.cant-afford) { border-color: #f4c84a; background: rgba(0,0,0,0.65); }
   .lobby-table.cant-afford { opacity: 0.5; cursor: default; }
-  .lobby-table-icon { font-size: 24px; flex-shrink: 0; }
+  .lobby-table-icon { flex-shrink: 0; display: flex; align-items: center; }
   .lobby-table-info { flex: 1; }
   .lobby-table-name  { font-size: 13px; font-weight: bold; color: #f4e84a; }
   .lobby-table-buyin { font-size: 11px; color: #ccc; margin-top: 1px; }
@@ -962,32 +970,263 @@
     font-family: Verdana, sans-serif;
   }
   #btn-signout:hover { color: #ccc; border-color: #666; }
+
+  /* ── Mode toggle tabs ── */
+  #mode-tabs {
+    display: flex;
+    width: 100%;
+    gap: 4px;
+    flex-shrink: 0;
+  }
+  .mode-tab {
+    flex: 1;
+    padding: 6px;
+    text-align: center;
+    font-size: 11px;
+    font-weight: bold;
+    color: #888;
+    border: 1px solid #3a2a08;
+    border-radius: 5px;
+    cursor: pointer;
+    transition: all 0.15s;
+    background: rgba(0,0,0,0.3);
+  }
+  .mode-tab.active { color: #f4e84a; border-color: #8B5E1A; background: rgba(139,94,26,0.2); }
+  .mode-tab:hover:not(.active) { color: #ccc; border-color: #5a3a08; }
+
+  /* ── Multiplayer lobby ── */
+  #mp-lobby { width: 100%; display: flex; flex-direction: column; gap: 8px; flex-shrink: 0; }
+
+  #mp-controls {
+    display: flex;
+    gap: 6px;
+  }
+  #btn-create-table {
+    flex: 1;
+    background: linear-gradient(to bottom, #1a5a2a, #0d3018);
+    border: 2px solid #2a8a3a;
+    border-radius: 5px;
+    color: #6eff6e;
+    font-family: Verdana, sans-serif;
+    font-size: 11px;
+    font-weight: bold;
+    padding: 7px;
+    cursor: pointer;
+  }
+  #btn-create-table:hover { filter: brightness(1.2); }
+  #btn-join-code {
+    flex: 1;
+    background: linear-gradient(to bottom, #1a4a7a, #0d2a4a);
+    border: 2px solid #2a6aaa;
+    border-radius: 5px;
+    color: #aaddff;
+    font-family: Verdana, sans-serif;
+    font-size: 11px;
+    font-weight: bold;
+    padding: 7px;
+    cursor: pointer;
+  }
+  #btn-join-code:hover { filter: brightness(1.2); }
+
+  #mp-tables-list { display: flex; flex-direction: column; gap: 5px; max-height: 260px; overflow-y: auto; }
+  #mp-tables-empty { font-size: 11px; color: #666; text-align: center; padding: 20px; }
+
+  .mp-table-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: rgba(0,0,0,0.4);
+    border: 1px solid #3a2a08;
+    border-radius: 6px;
+    padding: 8px 10px;
+    cursor: pointer;
+    transition: border-color 0.15s;
+  }
+  .mp-table-row:hover { border-color: #8B5E1A; }
+  .mp-table-row.full { opacity: 0.5; cursor: default; }
+  .mp-table-tier { font-size: 20px; flex-shrink: 0; }
+  .mp-table-info { flex: 1; }
+  .mp-table-host { font-size: 11px; font-weight: bold; color: #f4e84a; }
+  .mp-table-details { font-size: 9px; color: #888; margin-top: 2px; }
+  .mp-table-players { font-size: 10px; color: #ccc; text-align: right; flex-shrink: 0; }
+  .mp-table-lock { font-size: 12px; flex-shrink: 0; }
+
+  /* ── Create table dialog ── */
+  #create-table-dialog {
+    display: none;
+    position: absolute;
+    inset: 0;
+    background: rgba(0,0,0,0.75);
+    z-index: 300;
+    align-items: center;
+    justify-content: center;
+  }
+  #create-table-box {
+    background: #1e3d10;
+    border: 3px solid #8B5E1A;
+    border-radius: 10px;
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    min-width: 280px;
+  }
+  #create-table-box h3 { color: #f4e84a; font-size: 14px; text-align: center; }
+  .ct-row { display: flex; flex-direction: column; gap: 4px; }
+  .ct-label { font-size: 10px; color: #aaa; text-transform: uppercase; letter-spacing: 0.5px; }
+  .ct-select, .ct-input {
+    background: #111;
+    border: 1px solid #8B5E1A;
+    border-radius: 4px;
+    color: #f4e84a;
+    font-family: Verdana, sans-serif;
+    font-size: 12px;
+    padding: 6px 8px;
+  }
+  .ct-toggle-row { display: flex; gap: 6px; }
+  .ct-toggle {
+    flex: 1;
+    padding: 6px;
+    text-align: center;
+    font-size: 11px;
+    border: 1px solid #3a2a08;
+    border-radius: 4px;
+    cursor: pointer;
+    color: #888;
+    background: rgba(0,0,0,0.3);
+  }
+  .ct-toggle.active { color: #f4e84a; border-color: #8B5E1A; background: rgba(139,94,26,0.2); }
+  #ct-btn-row { display: flex; gap: 8px; }
+  #btn-ct-cancel {
+    flex: 1; padding: 8px;
+    background: rgba(0,0,0,0.3); border: 1px solid #5a2020;
+    border-radius: 5px; color: #ffaaaa; cursor: pointer;
+    font-family: Verdana, sans-serif; font-size: 11px;
+  }
+  #btn-ct-create {
+    flex: 2; padding: 8px;
+    background: linear-gradient(to bottom, #1a5a2a, #0d3018);
+    border: 2px solid #2a8a3a; border-radius: 5px;
+    color: #6eff6e; cursor: pointer; font-weight: bold;
+    font-family: Verdana, sans-serif; font-size: 11px;
+  }
+
+  /* ── Join by code dialog ── */
+  #join-code-dialog {
+    display: none;
+    position: absolute;
+    inset: 0;
+    background: rgba(0,0,0,0.75);
+    z-index: 300;
+    align-items: center;
+    justify-content: center;
+  }
+  #join-code-box {
+    background: #1e3d10;
+    border: 3px solid #8B5E1A;
+    border-radius: 10px;
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    min-width: 260px;
+    text-align: center;
+  }
+  #join-code-box h3 { color: #f4e84a; font-size: 14px; }
+  #join-code-input {
+    background: #111; border: 2px solid #8B5E1A;
+    border-radius: 6px; color: #f4e84a;
+    font-family: Verdana, sans-serif; font-size: 20px;
+    font-weight: bold; letter-spacing: 6px;
+    text-align: center; padding: 10px;
+    text-transform: uppercase;
+  }
+  #join-code-status { font-size: 10px; color: #888; }
+  #join-btn-row { display: flex; gap: 8px; }
+  #btn-jc-cancel {
+    flex: 1; padding: 8px;
+    background: rgba(0,0,0,0.3); border: 1px solid #5a2020;
+    border-radius: 5px; color: #ffaaaa; cursor: pointer;
+    font-family: Verdana, sans-serif; font-size: 11px;
+  }
+  #btn-jc-join {
+    flex: 2; padding: 8px;
+    background: linear-gradient(to bottom, #1a4a7a, #0d2a4a);
+    border: 2px solid #2a6aaa; border-radius: 5px;
+    color: #aaddff; cursor: pointer; font-weight: bold;
+    font-family: Verdana, sans-serif; font-size: 11px;
+  }
+
+  /* ── Multiplayer waiting room ── */
+  #mp-waiting {
+    display: none;
+    position: absolute;
+    inset: 0;
+    background: radial-gradient(ellipse 70% 50% at 50% 50%, #3a7a25 0%, #2d5a1b 60%, #1e3d10 100%);
+    z-index: 200;
+    flex-direction: column;
+    align-items: center;
+    padding: 20px;
+    gap: 12px;
+    overflow-y: auto;
+  }
+  #mp-waiting-title { font-size: 16px; font-weight: bold; color: #f4e84a; }
+  #mp-waiting-code-row { display: flex; align-items: center; gap: 8px; }
+  #mp-table-code {
+    font-size: 22px; font-weight: bold; letter-spacing: 6px;
+    color: #f4e84a; background: rgba(0,0,0,0.4);
+    border: 2px solid #8B5E1A; border-radius: 6px;
+    padding: 6px 14px;
+  }
+  #mp-copy-code {
+    font-size: 10px; color: #888; background: none;
+    border: 1px solid #5a3a08; border-radius: 4px;
+    padding: 4px 8px; cursor: pointer; font-family: Verdana, sans-serif;
+  }
+  #mp-copy-code:hover { color: #ccc; }
+  #mp-waiting-players { width: 100%; display: flex; flex-direction: column; gap: 5px; }
+  .mp-waiting-player {
+    display: flex; align-items: center; gap: 8px;
+    background: rgba(0,0,0,0.35); border: 1px solid #3a2a08;
+    border-radius: 6px; padding: 8px 10px;
+  }
+  .mp-waiting-player img { width: 28px; height: 28px; border-radius: 50%; object-fit: cover; }
+  .mp-waiting-player .wp-name { font-size: 12px; color: #fff; flex: 1; }
+  .mp-waiting-player .wp-host { font-size: 9px; color: #f4e84a; }
+  .mp-waiting-player .wp-ready { font-size: 12px; }
+  #mp-waiting-status { font-size: 11px; color: #888; text-align: center; }
+  #btn-mp-start {
+    width: 100%; padding: 10px;
+    background: linear-gradient(to bottom, #1a5a2a, #0d3018);
+    border: 2px solid #2a8a3a; border-radius: 6px;
+    color: #6eff6e; font-family: Verdana, sans-serif;
+    font-size: 13px; font-weight: bold; cursor: pointer;
+  }
+  #btn-mp-start:hover { filter: brightness(1.2); }
+  #btn-mp-start:disabled { opacity: 0.4; cursor: default; }
+  #btn-mp-leave-waiting {
+    font-size: 10px; color: #888; background: none;
+    border: 1px solid #5a2020; border-radius: 4px;
+    padding: 4px 10px; cursor: pointer; font-family: Verdana, sans-serif;
+  }
+
+  /* Disconnection countdown on seat */
+  .disconnect-timer {
+    position: absolute;
+    top: -8px; left: 50%; transform: translateX(-50%);
+    background: rgba(180,0,0,0.9); color: #fff;
+    font-size: 9px; font-weight: bold;
+    padding: 2px 6px; border-radius: 3px;
+    white-space: nowrap; z-index: 30;
+  }
 </style>
 
 <!-- Firebase -->
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
-<script>
-  const firebaseConfig = {
-    apiKey: "AIzaSyCM1VPoxsdvMbA53adqnObIjZeNXOoV-yY",
-    authDomain: "poker-67505.firebaseapp.com",
-    databaseURL: "https://poker-67505-default-rtdb.europe-west1.firebasedatabase.app",
-    projectId: "poker-67505",
-    storageBucket: "poker-67505.firebasestorage.app",
-    messagingSenderId: "388637800331",
-    appId: "1:388637800331:web:f9d968f60516071d02e18e",
-    measurementId: "G-YFB6QBXWQ1"
-  };
-  let auth, db;
-  try {
-    firebase.initializeApp(firebaseConfig);
-    auth = firebase.auth();
-    db   = firebase.firestore();
-  } catch(e) {
-    console.warn('Firebase unavailable — running in local mode');
-  }
-</script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
+
 </head>
 <body>
 <div id="game-container">
@@ -1005,9 +1244,78 @@
     <div id="signin-status"></div>
   </div>
 
+
+  <!-- Create table dialog -->
+  <div id="create-table-dialog">
+    <div id="create-table-box">
+      <h3>Create Table</h3>
+      <div class="ct-row">
+        <div class="ct-label">Stake Level</div>
+        <select id="ct-tier" class="ct-select">
+          <option value="0">🥉 Bronze — Buy-in: 20–200 GP</option>
+          <option value="1">🥈 Silver — Buy-in: 200–2,000 GP</option>
+          <option value="2">🥇 Gold — Buy-in: 2,000–20,000 GP</option>
+          <option value="3">💎 Diamond — Buy-in: 20,000–200,000 GP</option>
+        </select>
+      </div>
+      <div class="ct-row">
+        <div class="ct-label">Visibility</div>
+        <div class="ct-toggle-row">
+          <div class="ct-toggle active" id="ct-public" onclick="setTableVisibility('public')">🌍 Public</div>
+          <div class="ct-toggle" id="ct-private" onclick="setTableVisibility('private')">🔒 Private</div>
+        </div>
+      </div>
+      <div class="ct-row">
+        <div class="ct-label">Max Players</div>
+        <select id="ct-maxplayers" class="ct-select">
+          <option value="2">2 players</option>
+          <option value="4">4 players</option>
+          <option value="6" selected>6 players</option>
+          <option value="8">8 players</option>
+          <option value="10">10 players</option>
+        </select>
+      </div>
+      <div id="ct-btn-row">
+        <button id="btn-ct-cancel" onclick="closeCreateTable()">Cancel</button>
+        <button id="btn-ct-create" onclick="createTable()">Create Table</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Join by code dialog -->
+  <div id="join-code-dialog">
+    <div id="join-code-box">
+      <h3>Join by Code</h3>
+      <input type="text" id="join-code-input" maxlength="6" placeholder="XXXXXX"
+             oninput="this.value=this.value.toUpperCase()">
+      <div id="join-code-status"></div>
+      <div id="join-btn-row">
+        <button id="btn-jc-cancel" onclick="closeJoinCode()">Cancel</button>
+        <button id="btn-jc-join" onclick="joinByCode()">Join</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Multiplayer waiting room -->
+  <div id="mp-waiting">
+    <div id="mp-waiting-title">Waiting for Players</div>
+    <div id="mp-waiting-code-row">
+      <div id="mp-table-code">------</div>
+      <button id="mp-copy-code" onclick="copyTableCode()">Copy Code</button>
+    </div>
+    <div id="mp-waiting-players"></div>
+    <div id="mp-waiting-status">Waiting for more players...</div>
+    <button id="btn-mp-start" onclick="startMultiplayerGame()" disabled>Start Game</button>
+    <button id="btn-mp-leave-waiting" onclick="leaveWaitingRoom()">Leave Table</button>
+  </div>
+
   <!-- LOBBY SCREEN -->
   <div id="lobby" style="display:none;">
     <div id="lobby-title">Poker Tables</div>
+    <div id="mode-tabs">
+      <div class="mode-tab active" id="tab-solo" onclick="switchMode('solo')">Singleplayer</div>
+      <div class="mode-tab" id="tab-multi" onclick="switchMode('multi')">Multiplayer</div>
+    </div>
     <div id="player-info-bar">
       <img id="player-info-avatar" src="" alt="">
       <div>
@@ -1019,9 +1327,11 @@
     <div id="lobby-bankroll">
       Bankroll: <span id="lobby-bankroll-amount">0</span> <img id="lobby-coin" src="" alt="GP">
     </div>
+
+    <!-- Singleplayer tables (shown in solo mode) -->
     <div id="lobby-tables">
       <div class="lobby-table" id="ltable-0" onclick="sitDown(0)">
-        <div class="lobby-table-icon">🥉</div>
+        <div class="lobby-table-icon"><svg width="32" height="44" viewBox="0 0 32 44" xmlns="http://www.w3.org/2000/svg" style=""><rect x="1" y="1" width="30" height="42" rx="4" ry="4" fill="#1a1a1a" stroke="#cd7f32" stroke-width="1.5"/><text x="3" y="11" font-size="8" font-family="Georgia,serif" font-weight="bold" fill="#cd7f32">A</text><text x="3" y="19" font-size="8" font-family="Georgia,serif" fill="#cd7f32">♠</text><text x="16" y="30" font-size="12" font-family="Georgia,serif" fill="#cd7f32" text-anchor="middle">♠</text><text x="29" y="43" font-size="8" font-family="Georgia,serif" font-weight="bold" fill="#cd7f32" text-anchor="end" transform="rotate(180,26,38)">A</text><text x="29" y="35" font-size="8" font-family="Georgia,serif" fill="#cd7f32" text-anchor="end" transform="rotate(180,26,30)">♠</text></svg></div>
         <div class="lobby-table-info">
           <div class="lobby-table-name">Bronze Table</div>
           <div class="lobby-table-buyin">Buy-in: 20 – 200 GP</div>
@@ -1030,7 +1340,7 @@
         <div class="lobby-table-badge" id="ltbadge-0">Play</div>
       </div>
       <div class="lobby-table" id="ltable-1" onclick="sitDown(1)">
-        <div class="lobby-table-icon">🥈</div>
+        <div class="lobby-table-icon"><svg width="32" height="44" viewBox="0 0 32 44" xmlns="http://www.w3.org/2000/svg" style=""><rect x="1" y="1" width="30" height="42" rx="4" ry="4" fill="#1a1a1a" stroke="#c0c0c0" stroke-width="1.5"/><text x="3" y="11" font-size="8" font-family="Georgia,serif" font-weight="bold" fill="#c0c0c0">A</text><text x="3" y="19" font-size="8" font-family="Georgia,serif" fill="#c0c0c0">♠</text><text x="16" y="30" font-size="12" font-family="Georgia,serif" fill="#c0c0c0" text-anchor="middle">♠</text><text x="29" y="43" font-size="8" font-family="Georgia,serif" font-weight="bold" fill="#c0c0c0" text-anchor="end" transform="rotate(180,26,38)">A</text><text x="29" y="35" font-size="8" font-family="Georgia,serif" fill="#c0c0c0" text-anchor="end" transform="rotate(180,26,30)">♠</text></svg></div>
         <div class="lobby-table-info">
           <div class="lobby-table-name">Silver Table</div>
           <div class="lobby-table-buyin">Buy-in: 200 – 2,000 GP</div>
@@ -1039,7 +1349,7 @@
         <div class="lobby-table-badge" id="ltbadge-1">Play</div>
       </div>
       <div class="lobby-table" id="ltable-2" onclick="sitDown(2)">
-        <div class="lobby-table-icon">🥇</div>
+        <div class="lobby-table-icon"><svg width="32" height="44" viewBox="0 0 32 44" xmlns="http://www.w3.org/2000/svg" style="filter: drop-shadow(0 0 4px #ffd70066);"><rect x="1" y="1" width="30" height="42" rx="4" ry="4" fill="#1a1a1a" stroke="#ffd700" stroke-width="1.5"/><text x="3" y="11" font-size="8" font-family="Georgia,serif" font-weight="bold" fill="#ffd700">A</text><text x="3" y="19" font-size="8" font-family="Georgia,serif" fill="#ffd700">♠</text><text x="16" y="30" font-size="12" font-family="Georgia,serif" fill="#ffd700" text-anchor="middle">♠</text><text x="29" y="43" font-size="8" font-family="Georgia,serif" font-weight="bold" fill="#ffd700" text-anchor="end" transform="rotate(180,26,38)">A</text><text x="29" y="35" font-size="8" font-family="Georgia,serif" fill="#ffd700" text-anchor="end" transform="rotate(180,26,30)">♠</text></svg></div>
         <div class="lobby-table-info">
           <div class="lobby-table-name">Gold Table</div>
           <div class="lobby-table-buyin">Buy-in: 2,000 – 20,000 GP</div>
@@ -1048,7 +1358,7 @@
         <div class="lobby-table-badge" id="ltbadge-2">Play</div>
       </div>
       <div class="lobby-table" id="ltable-3" onclick="sitDown(3)">
-        <div class="lobby-table-icon">💎</div>
+        <div class="lobby-table-icon"><svg width="32" height="44" viewBox="0 0 32 44" xmlns="http://www.w3.org/2000/svg" style="filter: drop-shadow(0 0 4px #b9f2ff88);"><rect x="1" y="1" width="30" height="42" rx="4" ry="4" fill="#1a1a1a" stroke="#b9f2ff" stroke-width="1.5"/><text x="3" y="11" font-size="8" font-family="Georgia,serif" font-weight="bold" fill="#b9f2ff">A</text><text x="3" y="19" font-size="8" font-family="Georgia,serif" fill="#b9f2ff">♠</text><text x="16" y="30" font-size="12" font-family="Georgia,serif" fill="#b9f2ff" text-anchor="middle">♠</text><text x="29" y="43" font-size="8" font-family="Georgia,serif" font-weight="bold" fill="#b9f2ff" text-anchor="end" transform="rotate(180,26,38)">A</text><text x="29" y="35" font-size="8" font-family="Georgia,serif" fill="#b9f2ff" text-anchor="end" transform="rotate(180,26,30)">♠</text></svg></div>
         <div class="lobby-table-info">
           <div class="lobby-table-name">Diamond Table</div>
           <div class="lobby-table-buyin">Buy-in: 20,000 – 200,000 GP</div>
@@ -1057,6 +1367,18 @@
         <div class="lobby-table-badge" id="ltbadge-3">Play</div>
       </div>
     </div>
+
+    <!-- Multiplayer section (shown in multi mode) -->
+    <div id="mp-lobby" style="display:none;">
+      <div id="mp-controls">
+        <button id="btn-create-table" onclick="openCreateTable()">+ Create Table</button>
+        <button id="btn-join-code" onclick="openJoinCode()">🔑 Join by Code</button>
+      </div>
+      <div id="mp-tables-list">
+        <div id="mp-tables-empty">No public tables open. Create one!</div>
+      </div>
+    </div>
+
     <button id="btn-stats" onclick="toggleStats()">▼ Profile &amp; Stats</button>
     <div id="lobby-stats" style="display:none;">
 
@@ -1095,9 +1417,9 @@
 
     </div>
     <div id="broke-panel">
-      <div class="broke-icon">💸</div>
-      <div class="broke-title">Bankrupt!</div>
-      <div class="broke-sub">You've run out of GP.<br>Everyone goes bust sometimes.</div>
+      <div class="broke-icon" id="broke-icon">💸</div>
+      <div class="broke-title" id="broke-title">Bankrupt!</div>
+      <div class="broke-sub" id="broke-sub">You've run out of GP.<br>Everyone goes bust sometimes.</div>
       <div class="broke-divider"></div>
       <button id="btn-start-fresh" onclick="startFresh()">Start Fresh — 500 GP</button>
     </div>
@@ -1250,6 +1572,27 @@
 </div>
 
 <script>
+
+  const firebaseConfig = {
+    apiKey: "AIzaSyCM1VPoxsdvMbA53adqnObIjZeNXOoV-yY",
+    authDomain: "poker-67505.firebaseapp.com",
+    databaseURL: "https://poker-67505-default-rtdb.europe-west1.firebasedatabase.app",
+    projectId: "poker-67505",
+    storageBucket: "poker-67505.firebasestorage.app",
+    messagingSenderId: "388637800331",
+    appId: "1:388637800331:web:f9d968f60516071d02e18e",
+    measurementId: "G-YFB6QBXWQ1"
+  };
+  let auth, db, rtdb;
+  try {
+    firebase.initializeApp(firebaseConfig);
+    auth = firebase.auth();
+    db   = firebase.firestore();
+    rtdb = firebase.database();
+  } catch(e) {
+    console.warn('Firebase unavailable — running in local mode');
+  }
+
 // ============================================================
 // GAME STATE
 // ============================================================
@@ -2385,13 +2728,19 @@ function renderProfile() {
 
   // Rank row — show player avatar with rank-coloured border
   const rankIcon = document.getElementById('profile-rank-icon');
-  rankIcon.textContent = '🧑‍✈️';
+  if (currentUser && currentUser.photoURL) {
+    rankIcon.innerHTML = `<img src="${currentUser.photoURL}" style="width:100%;height:100%;border-radius:50%;object-fit:cover;">`;
+  } else {
+    rankIcon.textContent = '🧑‍✈️';
+  }
   rankIcon.style.borderColor = rank.color;
   rankIcon.style.boxShadow = rank.glow
     ? `0 0 8px ${rank.color}88, 0 0 0 1px rgba(0,0,0,0.5)`
     : '0 0 0 1px rgba(0,0,0,0.5)';
+  const displayName = (currentUser && currentUser.displayName)
+    ? currentUser.displayName.split(' ')[0] : 'You';
   document.getElementById('profile-rank-name').innerHTML =
-    `You &nbsp;<span style="font-size:11px;color:${rank.color}">${rank.icon} ${rank.name}</span>`;
+    `${displayName} &nbsp;<span style="font-size:11px;color:${rank.color}">${rank.icon} ${rank.name}</span>`;
 
   if (nextRank) {
     const progress = Math.min(100, ((won - rank.min) / (nextRank.min - rank.min) * 100)).toFixed(0);
@@ -2608,6 +2957,12 @@ function showLobby() {
   document.getElementById('game-container').classList.add('lobby-active');
   document.getElementById('lobby').style.display = 'flex';
   updatePlayerInfoBar();
+  // Broke panel — only in solo mode
+  const broke = mpMode === 'solo' && bankroll < 20;
+  document.getElementById('broke-panel').style.display  = broke ? 'flex' : 'none';
+  document.getElementById('lobby-tables').style.display = (mpMode === 'solo' && !broke) ? 'flex' : 'none';
+  document.getElementById('lobby-hint').style.display   = (mpMode === 'solo' && !broke) ? 'block' : 'none';
+  document.getElementById('mp-lobby').style.display     = mpMode === 'multi' ? 'flex' : 'none';
   document.getElementById('message-overlay').style.display = 'none';
 
   // Update coin src
@@ -2624,13 +2979,18 @@ function showLobby() {
   profitEl.className = 'stat-value ' + (profit > 0 ? 'stat-won' : profit < 0 ? 'stat-lost' : '');
   renderProfile();
 
-  // Broke panel
-  const broke = bankroll < 20; // less than Bronze min
-  document.getElementById('broke-panel').style.display  = broke ? 'flex' : 'none';
-  document.getElementById('lobby-tables').style.display = broke ? 'none' : 'flex';
-  document.getElementById('lobby-hint').style.display   = broke ? 'none' : 'block';
-  // Always show stats when broke so player sees their history
+  // Always show stats when broke
   if (broke) {
+    if (bankroll === 0) {
+      document.getElementById('broke-icon').textContent  = '💸';
+      document.getElementById('broke-title').textContent = 'Bankrupt!';
+      document.getElementById('broke-sub').innerHTML     = "You've run out of GP.<br>Everyone goes bust sometimes.";
+    } else {
+      const needed = 20 - bankroll;
+      document.getElementById('broke-icon').textContent  = '🪙';
+      document.getElementById('broke-title').textContent = 'Almost There!';
+      document.getElementById('broke-sub').innerHTML     = `You have ${fmt(bankroll)} GP but need ${fmt(needed)} more<br>to sit at the Bronze table.`;
+    }
     document.getElementById('lobby-stats').style.display = 'flex';
     document.getElementById('btn-stats').textContent = '▲ Profile & Stats';
   }
@@ -2901,6 +3261,7 @@ if (auth) { auth.onAuthStateChanged(async user => {
     await loadPlayerData();
     await recoverSession();
     updatePlayerInfoBar();
+    renderProfile();
     showLobby();
   }
 });
@@ -2915,9 +3276,344 @@ if (auth) { auth.onAuthStateChanged(async user => {
 }
 
 // ============================================================
+// MULTIPLAYER SYSTEM
+// ============================================================
+
+let mpMode = 'solo'; // 'solo' | 'multi'
+let mpTableId = null;
+let mpTableRef = null;
+let mpIsHost = false;
+let mpTableVisibility = 'public';
+let mpPlayers = {}; // uid -> player data
+let mpDisconnectTimers = {}; // uid -> timer
+let mpPublicTablesRef = null;
+let mpTableListener = null;
+let DISCONNECT_TIMEOUT = 45000;
+
+// ── Mode switching
+function switchMode(mode) {
+  mpMode = mode;
+  document.getElementById('tab-solo').classList.toggle('active', mode === 'solo');
+  document.getElementById('tab-multi').classList.toggle('active', mode === 'multi');
+
+  const isSolo  = mode === 'solo';
+  const isMulti = mode === 'multi';
+
+  document.getElementById('mp-lobby').style.display = isMulti ? 'flex' : 'none';
+
+  if (isSolo) {
+    // Let showLobby's existing broke/table logic handle solo display
+    const broke = bankroll < 20;
+    document.getElementById('lobby-tables').style.display = broke ? 'none' : 'flex';
+    document.getElementById('broke-panel').style.display  = broke ? 'flex'  : 'none';
+    document.getElementById('lobby-hint').style.display   = broke ? 'none'  : 'block';
+  } else {
+    // Hide solo panels when in multi mode
+    document.getElementById('lobby-tables').style.display = 'none';
+    document.getElementById('broke-panel').style.display  = 'none';
+    document.getElementById('lobby-hint').style.display   = 'none';
+    if (!currentUser) {
+      document.getElementById('mp-tables-empty').textContent = 'Sign in to play multiplayer.';
+      return;
+    }
+    listenPublicTables();
+  }
+  if (isSolo) stopListeningPublicTables();
+}
+
+// ── Generate a 6-char table code
+function generateCode() {
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  return Array.from({length: 6}, () => chars[Math.floor(Math.random() * chars.length)]).join('');
+}
+
+// ── Create table dialog
+function openCreateTable() {
+  if (!currentUser) { alert('Please sign in to create a table.'); return; }
+  document.getElementById('create-table-dialog').style.display = 'flex';
+}
+function closeCreateTable() {
+  document.getElementById('create-table-dialog').style.display = 'none';
+}
+function setTableVisibility(v) {
+  mpTableVisibility = v;
+  document.getElementById('ct-public').classList.toggle('active', v === 'public');
+  document.getElementById('ct-private').classList.toggle('active', v === 'private');
+}
+
+async function createTable() {
+  if (!currentUser || !rtdb) return;
+  const tierIdx    = parseInt(document.getElementById('ct-tier').value);
+  const maxPlayers = parseInt(document.getElementById('ct-maxplayers').value);
+  const t          = TABLES[tierIdx];
+  const code       = generateCode();
+  const tableId    = code;
+
+  const tableData = {
+    config: {
+      code, tierIdx, maxPlayers,
+      hostUid: currentUser.uid,
+      hostName: currentUser.displayName || 'Host',
+      visibility: mpTableVisibility,
+      blinds: t.bb,
+      tierName: t.name,
+      createdAt: firebase.database.ServerValue.TIMESTAMP,
+    },
+    state: { phase: 'waiting' },
+    players: {
+      [currentUser.uid]: {
+        publicInfo: {
+          uid: currentUser.uid,
+          name: currentUser.displayName || 'Player',
+          photo: currentUser.photoURL || '',
+          chips: Math.min(bankroll, t.max),
+          bet: 0, folded: false, allin: false,
+          connected: true, joinedAt: firebase.database.ServerValue.TIMESTAMP,
+          rank: getRank(stats.won || 0).name,
+        }
+      }
+    }
+  };
+
+  // Deduct buy-in from bankroll
+  const buyIn = Math.min(bankroll, t.max);
+  bankroll -= buyIn;
+  saveBankroll();
+
+  await rtdb.ref('tables/' + tableId).set(tableData);
+  closeCreateTable();
+  enterWaitingRoom(tableId, true);
+}
+
+// ── Join by code
+function openJoinCode() {
+  if (!currentUser) { alert('Please sign in to join a table.'); return; }
+  document.getElementById('join-code-input').value = '';
+  document.getElementById('join-code-status').textContent = '';
+  document.getElementById('join-code-dialog').style.display = 'flex';
+}
+function closeJoinCode() {
+  document.getElementById('join-code-dialog').style.display = 'none';
+}
+async function joinByCode() {
+  const code = document.getElementById('join-code-input').value.trim().toUpperCase();
+  if (code.length !== 6) {
+    document.getElementById('join-code-status').textContent = 'Enter a 6-character code.';
+    return;
+  }
+  await joinTable(code);
+}
+
+async function joinTable(tableId) {
+  if (!currentUser || !rtdb) return;
+  const snap = await rtdb.ref('tables/' + tableId).once('value');
+  if (!snap.exists()) {
+    document.getElementById('join-code-status').textContent = 'Table not found.';
+    return;
+  }
+  const data = snap.val();
+  if (data.state.phase !== 'waiting') {
+    document.getElementById('join-code-status').textContent = 'Game already in progress.';
+    return;
+  }
+  const playerCount = Object.keys(data.players || {}).length;
+  if (playerCount >= data.config.maxPlayers) {
+    document.getElementById('join-code-status').textContent = 'Table is full.';
+    return;
+  }
+  // Already in table?
+  if (data.players && data.players[currentUser.uid]) {
+    closeJoinCode();
+    enterWaitingRoom(tableId, data.config.hostUid === currentUser.uid);
+    return;
+  }
+
+  const t = TABLES[data.config.tierIdx];
+  const buyIn = Math.min(bankroll, t.max);
+  if (buyIn < t.min) {
+    document.getElementById('join-code-status').textContent = 'Not enough GP for this table.';
+    return;
+  }
+  bankroll -= buyIn;
+  saveBankroll();
+
+  await rtdb.ref('tables/' + tableId + '/players/' + currentUser.uid).set({
+    publicInfo: {
+      uid: currentUser.uid,
+      name: currentUser.displayName || 'Player',
+      photo: currentUser.photoURL || '',
+      chips: buyIn,
+      bet: 0, folded: false, allin: false,
+      connected: true, joinedAt: firebase.database.ServerValue.TIMESTAMP,
+      rank: getRank(stats.won || 0).name,
+    }
+  });
+
+  closeJoinCode();
+  enterWaitingRoom(tableId, false);
+}
+
+// ── Public tables listener
+function listenPublicTables() {
+  if (!rtdb) return;
+  stopListeningPublicTables();
+  mpPublicTablesRef = rtdb.ref('tables').orderByChild('config/visibility').equalTo('public');
+  mpPublicTablesRef.on('value', snap => {
+    const list = document.getElementById('mp-tables-list');
+    const empty = document.getElementById('mp-tables-empty');
+    const tables = snap.val() || {};
+    const waiting = Object.entries(tables).filter(([id, t]) => t.state && t.state.phase === 'waiting');
+    if (waiting.length === 0) {
+      list.innerHTML = '';
+      empty.style.display = 'block';
+      empty.textContent = 'No public tables open. Create one!';
+    } else {
+      empty.style.display = 'none';
+      list.innerHTML = '';
+      waiting.forEach(([id, t]) => {
+        const cfg = t.config;
+        const players = Object.keys(t.players || {});
+        const tier = TABLES[cfg.tierIdx] || TABLES[0];
+        const isFull = players.length >= cfg.maxPlayers;
+        const row = document.createElement('div');
+        row.className = 'mp-table-row' + (isFull ? ' full' : '');
+        row.innerHTML = `
+          <div class="mp-table-tier">${tier.icon}</div>
+          <div class="mp-table-info">
+            <div class="mp-table-host">${cfg.hostName}'s Table</div>
+            <div class="mp-table-details">${tier.name} · Buy-in: ${fmt(tier.min)}–${fmt(tier.max)} GP · Blinds: ${fmt(tier.sb)}/${fmt(tier.bb)}</div>
+          </div>
+          <div class="mp-table-players">${players.length}/${cfg.maxPlayers}</div>
+        `;
+        if (!isFull) row.onclick = () => joinTable(id);
+        list.appendChild(row);
+      });
+    }
+  });
+}
+function stopListeningPublicTables() {
+  if (mpPublicTablesRef) { mpPublicTablesRef.off(); mpPublicTablesRef = null; }
+}
+
+// ── Waiting room
+function enterWaitingRoom(tableId, isHost) {
+  mpTableId = tableId;
+  mpIsHost  = isHost;
+  stopListeningPublicTables();
+  document.getElementById('lobby').style.display = 'none';
+  document.getElementById('game-container').classList.remove('lobby-active');
+  document.getElementById('mp-waiting').style.display = 'flex';
+  document.getElementById('mp-table-code').textContent = tableId;
+  document.getElementById('btn-mp-start').style.display = isHost ? '' : 'none';
+
+  // Listen to table
+  mpTableRef = rtdb.ref('tables/' + tableId);
+  mpTableListener = mpTableRef.on('value', snap => {
+    if (!snap.exists()) { leaveWaitingRoom(); return; }
+    const data = snap.val();
+    mpPlayers = data.players || {};
+    renderWaitingRoom(data);
+    if (data.state && data.state.phase === 'playing') {
+      startMPGame(data);
+    }
+  });
+
+  // Set up presence/disconnect
+  const presenceRef = rtdb.ref('tables/' + tableId + '/players/' + currentUser.uid + '/publicInfo/connected');
+  presenceRef.onDisconnect().set(false);
+}
+
+function renderWaitingRoom(data) {
+  const cfg     = data.config;
+  const players = data.players || {};
+  const uids    = Object.keys(players);
+  const container = document.getElementById('mp-waiting-players');
+  container.innerHTML = '';
+  uids.forEach(uid => {
+    const p = players[uid].publicInfo;
+    if (!p) return;
+    const div = document.createElement('div');
+    div.className = 'mp-waiting-player';
+    div.innerHTML = `
+      <img src="${p.photo || ''}" onerror="this.style.display='none'">
+      <span class="wp-name">${p.name} ${uid === cfg.hostUid ? '<span class="wp-host">HOST</span>' : ''}</span>
+      <span class="wp-ready">${p.connected !== false ? '🟢' : '🔴'}</span>
+    `;
+    container.appendChild(div);
+  });
+
+  const count = uids.length;
+  const status = count < 2 ? 'Need at least 2 players to start.'
+    : `${count}/${cfg.maxPlayers} players. ${mpIsHost ? 'Start when ready!' : 'Waiting for host to start...'}`;
+  document.getElementById('mp-waiting-status').textContent = status;
+
+  const startBtn = document.getElementById('btn-mp-start');
+  startBtn.disabled = !mpIsHost || count < 2;
+}
+
+function copyTableCode() {
+  navigator.clipboard.writeText(mpTableId).then(() => {
+    document.getElementById('mp-copy-code').textContent = 'Copied!';
+    setTimeout(() => document.getElementById('mp-copy-code').textContent = 'Copy Code', 2000);
+  });
+}
+
+async function leaveWaitingRoom() {
+  if (!mpTableId || !currentUser || !rtdb) { showLobby(); return; }
+  // Return chips to bankroll
+  const snap = await rtdb.ref('tables/' + mpTableId + '/players/' + currentUser.uid + '/publicInfo/chips').once('value');
+  if (snap.exists()) { bankroll += snap.val(); saveBankroll(); }
+  await rtdb.ref('tables/' + mpTableId + '/players/' + currentUser.uid).remove();
+  // If host and leaving, reassign or delete table
+  if (mpIsHost) await rtdb.ref('tables/' + mpTableId).remove();
+  if (mpTableRef) { mpTableRef.off(); mpTableRef = null; }
+  mpTableId = null; mpIsHost = false;
+  document.getElementById('mp-waiting').style.display = 'none';
+  document.getElementById('game-container').classList.add('lobby-active');
+  showLobby();
+}
+
+// ── Start multiplayer game (host triggers)
+async function startMultiplayerGame() {
+  if (!mpIsHost || !mpTableId || !rtdb) return;
+  // Set phase to playing — all clients will detect this and start the game
+  await rtdb.ref('tables/' + mpTableId + '/state').update({
+    phase: 'playing',
+    dealerIdx: 0,
+    hand: 0,
+  });
+}
+
+// ── Client receives game start signal
+function startMPGame(data) {
+  document.getElementById('mp-waiting').style.display = 'none';
+  // TODO: full multiplayer game loop
+  // For now show a placeholder
+  alert('Multiplayer game starting! Full game loop coming soon.');
+}
+
+// ============================================================
+// RESPONSIVE SCALING
+// ============================================================
+function scaleGame() {
+  const W = 620, H = 860;
+  const scaleX = window.innerWidth  / W;
+  const scaleY = window.innerHeight / H;
+  const scale  = Math.min(scaleX, scaleY, 1); // never scale up beyond 1
+  document.getElementById('game-container').style.setProperty('--game-scale', scale);
+  // Adjust body so the scaled container doesn't cause overflow
+  const container = document.getElementById('game-container');
+  container.style.transform = `scale(${scale})`;
+  container.style.marginTop  = `${(H * scale - H) / 2}px`;
+  container.style.marginBottom = `${(H * scale - H) / 2}px`;
+}
+window.addEventListener('resize', scaleGame);
+
+// ============================================================
 // BOOT
 // ============================================================
 window.onload = () => {
+  scaleGame();
   // onAuthStateChanged handles signed-in users automatically
   // Show sign-in screen initially; it hides once auth resolves
   // If already signed in, onAuthStateChanged fires immediately
