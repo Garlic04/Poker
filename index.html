@@ -2870,6 +2870,11 @@ async function loadPlayerData() {
     if (data.stats)    stats    = data.stats;
     if (!stats.achievements) stats.achievements = {};
     if (!stats.handsPlayed)  stats.handsPlayed  = 0;
+  } else {
+    // First time sign-in — give starting bankroll and save
+    bankroll = STARTING_BANKROLL;
+    stats = { won: 0, lost: 0, resets: 0, achievements: {}, handsPlayed: 0 };
+    savePlayerData();
   }
 }
 
