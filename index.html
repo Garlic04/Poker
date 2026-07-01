@@ -3773,8 +3773,11 @@ function setupMPSeats(players, cfg) {
 }
 
 // ── Host deals a new hand
+let _mpDealingHand = false;
+
 async function mpDealNewHand(tableData) {
-  console.log("mpDealNewHand called", tableData ? "with data" : "NO DATA");
+  if (_mpDealingHand) { console.log('mpDealNewHand: already dealing, skipping'); return; }
+  _mpDealingHand = true;
   const players = tableData.players || {};
   try {
   const activePids = Object.keys(players).filter(uid => {
@@ -3845,7 +3848,8 @@ async function mpDealNewHand(tableData) {
 
   await rtdb.ref(`tables/${mpTableId}/state`).set(newState);
   console.log("mpDealNewHand: state written successfully");
-  } catch(e) { console.error("mpDealNewHand error:", e); }
+  _mpDealingHand = false;
+  } catch(e) { console.error("mpDealNewHand error:", e); _mpDealingHand = false; }
 }
 
 function getPreFlopOrder(pids, bbIdx) {
@@ -3915,8 +3919,8 @@ function renderMPState(s, players) {
   const phaseLabels = { flop: '— Flop —', turn: '— Turn —', river: '— River —' };
   if (phaseLabels[s.phase]) setStatus(phaseLabels[s.phase]);
 
-  // Check if hand ended
-  if (s.phase === 'showdown' || s.phase === 'ended') {
+  // Check if hand ended — only trigger once
+  if ((s.phase === 'showdown' || s.phase === 'ended') && !_mpHandEndedCalled) {
     mpHandEnded(s, players);
   }
 }
@@ -4092,52 +4096,75 @@ async function mpAdvancePhase(s) {
   return s;
 }
 
+let _mpHandEndedCalled = false;
+
 function mpHandEnded(s, players) {
   if (!mpIsHost) return;
-  // Award pot
+  if (_mpHandEndedCalled) return;
+  _mpHandEndedCalled = true;
+
   setTimeout(async () => {
     let winnerUid = s.winner;
+
     if (!winnerUid && s.phase === 'showdown') {
-      // Evaluate hands
-      const community = (s.community || []).map(c => ({ rank: c.slice(0,-1), suit: c.slice(-1) }));
-      const active = s.activePids.filter(p => !s.folded[p]);
+      // Fetch all private cards from Firebase to evaluate hands
+      const activePids = Array.isArray(s.activePids) ? s.activePids : Object.values(s.activePids || {});
+      const folded = s.folded || {};
+      const active = activePids.filter(p => !folded[p]);
+      const community = (Array.isArray(s.community) ? s.community : Object.values(s.community || {}))
+        .map(c => ({ rank: c.slice(0,-1), suit: c.slice(-1) }));
+
+      // Fetch each player's private cards
+      const cardFetches = active.map(uid =>
+        rtdb.ref(`tables/${mpTableId}/players/${uid}/privateCards`).once('value')
+          .then(snap => ({ uid, cards: snap.val() }))
+      );
+      const allCards = await Promise.all(cardFetches);
+
       let bestScore = -1;
-      active.forEach(uid => {
-        const cards = players[uid]?.publicInfo?.hand || [];
-        if (cards.length < 2) return;
-        const hand = cards.map(c => ({ rank: c.slice(0,-1), suit: c.slice(-1) }));
+      allCards.forEach(({ uid, cards }) => {
+        if (!cards || !cards.c1 || !cards.c2) return;
+        const hand = [cards.c1, cards.c2].map(c => ({ rank: c.slice(0,-1), suit: c.slice(-1) }));
         const score = getBestHandScore([...hand, ...community]);
+        console.log(uid, 'hand score:', score);
         if (score > bestScore) { bestScore = score; winnerUid = uid; }
       });
     }
-    if (!winnerUid) return;
 
-    // Award pot to winner
-    const newChips = { ...s.chips };
-    newChips[winnerUid] = (newChips[winnerUid] || 0) + s.pot;
+    if (!winnerUid) {
+      console.error('No winner found');
+      _mpHandEndedCalled = false;
+      return;
+    }
 
-    // Update bankrolls in Firestore for each player
-    const updates = {};
-    Object.keys(newChips).forEach(uid => { updates[uid] = newChips[uid]; });
+    console.log('Winner:', winnerUid, 'pot:', s.pot);
 
+    // Award pot
+    const chips = typeof s.chips === 'object' ? s.chips : {};
+    const newChips = { ...chips };
+    newChips[winnerUid] = (parseInt(newChips[winnerUid]) || 0) + (s.pot || 0);
+
+    // Write winner state
     await rtdb.ref(`tables/${mpTableId}/state`).update({
-      chips: newChips, pot: 0, phase: 'between_hands', winner: winnerUid
+      chips: newChips, pot: 0, phase: 'between_hands', winner: winnerUid, toAct: []
     });
 
-    // Start next hand after delay
+    // Update chips in player publicInfo
+    const chipUpdates = {};
+    Object.keys(newChips).forEach(uid => {
+      chipUpdates[`tables/${mpTableId}/players/${uid}/publicInfo/chips`] = newChips[uid];
+    });
+    await rtdb.ref().update(chipUpdates);
+
+    // Deal next hand after delay
     setTimeout(async () => {
+      _mpHandEndedCalled = false;
       const snap = await rtdb.ref('tables/' + mpTableId).once('value');
       if (snap.exists()) {
-        const data = snap.val();
-        // Update chips in players publicInfo
-        const chipUpdates = {};
-        Object.keys(newChips).forEach(uid => {
-          chipUpdates[`tables/${mpTableId}/players/${uid}/publicInfo/chips`] = newChips[uid];
-        });
-        await rtdb.ref().update(chipUpdates);
-        await mpDealNewHand({ ...data, players: data.players });
+        await mpDealNewHand(snap.val());
       }
     }, 3000);
+
   }, 1500);
 }
 
