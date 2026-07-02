@@ -71,7 +71,7 @@
     image-rendering: pixelated;
   }
   .coin-fly.pile {
-    width: 52px; height: 29px;
+    width: 80px; height: 45px;
     image-rendering: auto;
   }
   @keyframes coinFly {
@@ -256,7 +256,7 @@
   /* Pot area */
   #pot-area {
     position: absolute;
-    top: 255px;
+    top: 218px;
     left: 50%;
     transform: translateX(-50%);
     display: flex;
@@ -266,7 +266,7 @@
     z-index: 10;
   }
   #pot-icon {
-    width: 64px; height: 36px;
+    width: 130px; height: 73px;
     margin: 0 auto 2px;
     object-fit: contain;
     object-position: bottom center;
@@ -1058,7 +1058,8 @@
   }
   .mp-table-row:hover { border-color: #8B5E1A; }
   .mp-table-row.full { opacity: 0.5; cursor: default; }
-  .mp-table-tier { font-size: 20px; flex-shrink: 0; }
+  .mp-table-tier { flex-shrink: 0; display: flex; align-items: center; }
+  .mp-table-tier svg { width: 26px; height: 36px; }
   .mp-table-info { flex: 1; }
   .mp-table-host { font-size: 11px; font-weight: bold; color: #f4e84a; }
   .mp-table-details { font-size: 9px; color: #888; margin-top: 2px; }
@@ -1110,6 +1111,25 @@
     background: rgba(0,0,0,0.3);
   }
   .ct-toggle.active { color: #f4e84a; border-color: #8B5E1A; background: rgba(139,94,26,0.2); }
+  .ct-tier-options { display: flex; gap: 6px; }
+  .ct-tier-option {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 3px;
+    padding: 6px 2px;
+    text-align: center;
+    font-size: 9px;
+    border: 1px solid #3a2a08;
+    border-radius: 4px;
+    cursor: pointer;
+    color: #888;
+    background: rgba(0,0,0,0.3);
+  }
+  .ct-tier-option svg { width: 22px; height: 30px; }
+  .ct-tier-option.selected { color: #f4e84a; border-color: #8B5E1A; background: rgba(139,94,26,0.2); }
+  .ct-tier-option.disabled { opacity: 0.35; cursor: not-allowed; }
   #ct-btn-row { display: flex; gap: 8px; }
   #btn-ct-cancel {
     flex: 1; padding: 8px;
@@ -1265,12 +1285,7 @@
       <h3>Create Table</h3>
       <div class="ct-row">
         <div class="ct-label">Stake Level</div>
-        <select id="ct-tier" class="ct-select">
-          <option value="0">🥉 Bronze — Buy-in: 20–200 GP</option>
-          <option value="1">🥈 Silver — Buy-in: 200–2,000 GP</option>
-          <option value="2">🥇 Gold — Buy-in: 2,000–20,000 GP</option>
-          <option value="3">💎 Diamond — Buy-in: 20,000–200,000 GP</option>
-        </select>
+        <div id="ct-tier-options" class="ct-tier-options"></div>
       </div>
       <div class="ct-row">
         <div class="ct-label">Visibility</div>
@@ -1345,7 +1360,7 @@
     <!-- Singleplayer tables (shown in solo mode) -->
     <div id="lobby-tables">
       <div class="lobby-table" id="ltable-0" onclick="sitDown(0)">
-        <div class="lobby-table-icon"><svg width="32" height="44" viewBox="0 0 32 44" xmlns="http://www.w3.org/2000/svg" style=""><rect x="1" y="1" width="30" height="42" rx="4" ry="4" fill="#1a1a1a" stroke="#cd7f32" stroke-width="1.5"/><text x="3" y="11" font-size="8" font-family="Georgia,serif" font-weight="bold" fill="#cd7f32">A</text><text x="3" y="19" font-size="8" font-family="Georgia,serif" fill="#cd7f32">♠</text><text x="16" y="30" font-size="12" font-family="Georgia,serif" fill="#cd7f32" text-anchor="middle">♠</text><text x="29" y="43" font-size="8" font-family="Georgia,serif" font-weight="bold" fill="#cd7f32" text-anchor="end" transform="rotate(180,26,38)">A</text><text x="29" y="35" font-size="8" font-family="Georgia,serif" fill="#cd7f32" text-anchor="end" transform="rotate(180,26,30)">♠</text></svg></div>
+        <div class="lobby-table-icon"><svg width="32" height="44" viewBox="0 0 32 44" xmlns="http://www.w3.org/2000/svg"><rect x="1" y="1" width="30" height="42" rx="4" ry="4" fill="#f0f0f0" stroke="#cd7f32" stroke-width="2"/><text x="16" y="20" font-size="14" font-family="Georgia,serif" font-weight="bold" fill="#cd7f32" text-anchor="middle">A</text><text x="16" y="35" font-size="17" font-family="Georgia,serif" fill="#cd7f32" text-anchor="middle">♠</text></svg></div>
         <div class="lobby-table-info">
           <div class="lobby-table-name">Bronze Table</div>
           <div class="lobby-table-buyin">Buy-in: 20 – 200 GP</div>
@@ -1354,7 +1369,7 @@
         <div class="lobby-table-badge" id="ltbadge-0">Play</div>
       </div>
       <div class="lobby-table" id="ltable-1" onclick="sitDown(1)">
-        <div class="lobby-table-icon"><svg width="32" height="44" viewBox="0 0 32 44" xmlns="http://www.w3.org/2000/svg" style=""><rect x="1" y="1" width="30" height="42" rx="4" ry="4" fill="#1a1a1a" stroke="#c0c0c0" stroke-width="1.5"/><text x="3" y="11" font-size="8" font-family="Georgia,serif" font-weight="bold" fill="#c0c0c0">A</text><text x="3" y="19" font-size="8" font-family="Georgia,serif" fill="#c0c0c0">♠</text><text x="16" y="30" font-size="12" font-family="Georgia,serif" fill="#c0c0c0" text-anchor="middle">♠</text><text x="29" y="43" font-size="8" font-family="Georgia,serif" font-weight="bold" fill="#c0c0c0" text-anchor="end" transform="rotate(180,26,38)">A</text><text x="29" y="35" font-size="8" font-family="Georgia,serif" fill="#c0c0c0" text-anchor="end" transform="rotate(180,26,30)">♠</text></svg></div>
+        <div class="lobby-table-icon"><svg width="32" height="44" viewBox="0 0 32 44" xmlns="http://www.w3.org/2000/svg"><rect x="1" y="1" width="30" height="42" rx="4" ry="4" fill="#f0f0f0" stroke="#c0c0c0" stroke-width="2"/><text x="16" y="20" font-size="14" font-family="Georgia,serif" font-weight="bold" fill="#8a8a8a" text-anchor="middle">A</text><text x="16" y="35" font-size="17" font-family="Georgia,serif" fill="#8a8a8a" text-anchor="middle">♠</text></svg></div>
         <div class="lobby-table-info">
           <div class="lobby-table-name">Silver Table</div>
           <div class="lobby-table-buyin">Buy-in: 200 – 2,000 GP</div>
@@ -1363,7 +1378,7 @@
         <div class="lobby-table-badge" id="ltbadge-1">Play</div>
       </div>
       <div class="lobby-table" id="ltable-2" onclick="sitDown(2)">
-        <div class="lobby-table-icon"><svg width="32" height="44" viewBox="0 0 32 44" xmlns="http://www.w3.org/2000/svg" style="filter: drop-shadow(0 0 4px #ffd70066);"><rect x="1" y="1" width="30" height="42" rx="4" ry="4" fill="#1a1a1a" stroke="#ffd700" stroke-width="1.5"/><text x="3" y="11" font-size="8" font-family="Georgia,serif" font-weight="bold" fill="#ffd700">A</text><text x="3" y="19" font-size="8" font-family="Georgia,serif" fill="#ffd700">♠</text><text x="16" y="30" font-size="12" font-family="Georgia,serif" fill="#ffd700" text-anchor="middle">♠</text><text x="29" y="43" font-size="8" font-family="Georgia,serif" font-weight="bold" fill="#ffd700" text-anchor="end" transform="rotate(180,26,38)">A</text><text x="29" y="35" font-size="8" font-family="Georgia,serif" fill="#ffd700" text-anchor="end" transform="rotate(180,26,30)">♠</text></svg></div>
+        <div class="lobby-table-icon"><svg width="32" height="44" viewBox="0 0 32 44" xmlns="http://www.w3.org/2000/svg" style="filter: drop-shadow(0 0 4px #ffd70088);"><rect x="1" y="1" width="30" height="42" rx="4" ry="4" fill="#f0f0f0" stroke="#ffd700" stroke-width="2"/><text x="16" y="20" font-size="14" font-family="Georgia,serif" font-weight="bold" fill="#ffd700" text-anchor="middle">A</text><text x="16" y="35" font-size="17" font-family="Georgia,serif" fill="#ffd700" text-anchor="middle">♠</text></svg></div>
         <div class="lobby-table-info">
           <div class="lobby-table-name">Gold Table</div>
           <div class="lobby-table-buyin">Buy-in: 2,000 – 20,000 GP</div>
@@ -1372,7 +1387,7 @@
         <div class="lobby-table-badge" id="ltbadge-2">Play</div>
       </div>
       <div class="lobby-table" id="ltable-3" onclick="sitDown(3)">
-        <div class="lobby-table-icon"><svg width="32" height="44" viewBox="0 0 32 44" xmlns="http://www.w3.org/2000/svg" style="filter: drop-shadow(0 0 4px #b9f2ff88);"><rect x="1" y="1" width="30" height="42" rx="4" ry="4" fill="#1a1a1a" stroke="#b9f2ff" stroke-width="1.5"/><text x="3" y="11" font-size="8" font-family="Georgia,serif" font-weight="bold" fill="#b9f2ff">A</text><text x="3" y="19" font-size="8" font-family="Georgia,serif" fill="#b9f2ff">♠</text><text x="16" y="30" font-size="12" font-family="Georgia,serif" fill="#b9f2ff" text-anchor="middle">♠</text><text x="29" y="43" font-size="8" font-family="Georgia,serif" font-weight="bold" fill="#b9f2ff" text-anchor="end" transform="rotate(180,26,38)">A</text><text x="29" y="35" font-size="8" font-family="Georgia,serif" fill="#b9f2ff" text-anchor="end" transform="rotate(180,26,30)">♠</text></svg></div>
+        <div class="lobby-table-icon"><svg width="32" height="44" viewBox="0 0 32 44" xmlns="http://www.w3.org/2000/svg" style="filter: drop-shadow(0 0 4px #b9f2ff88);"><rect x="1" y="1" width="30" height="42" rx="4" ry="4" fill="#f0f0f0" stroke="#b9f2ff" stroke-width="2"/><text x="16" y="20" font-size="14" font-family="Georgia,serif" font-weight="bold" fill="#2f9fc4" text-anchor="middle">A</text><text x="16" y="35" font-size="17" font-family="Georgia,serif" fill="#2f9fc4" text-anchor="middle">♠</text></svg></div>
         <div class="lobby-table-info">
           <div class="lobby-table-name">Diamond Table</div>
           <div class="lobby-table-buyin">Buy-in: 20,000 – 200,000 GP</div>
@@ -1613,6 +1628,21 @@
 const SUITS = ['♠','♥','♦','♣'];
 const RANKS = ['2','3','4','5','6','7','8','9','10','J','Q','K','A'];
 const RANK_VAL = {2:2,3:3,4:4,5:5,6:6,7:7,8:8,9:9,10:10,J:11,Q:12,K:13,A:14};
+
+// Table-tier icon: a mini version of the actual in-game card (light face,
+// black rank stacked over suit, centred) with a tier-coloured border/glow
+// so the four stake levels stay visually distinct. Used for singleplayer
+// lobby rows, the multiplayer create-table tier picker, and the public
+// table list — one definition, so they always match.
+function tableCardIcon(color, glow, textColor) {
+  const glowStyle = glow ? ` style="filter: drop-shadow(0 0 4px ${color}88);"` : '';
+  const tc = textColor || color;
+  return `<svg width="32" height="44" viewBox="0 0 32 44" xmlns="http://www.w3.org/2000/svg"${glowStyle}>` +
+    `<rect x="1" y="1" width="30" height="42" rx="4" ry="4" fill="#f0f0f0" stroke="${color}" stroke-width="2"/>` +
+    `<text x="16" y="20" font-size="14" font-family="Georgia,serif" font-weight="bold" fill="${tc}" text-anchor="middle">A</text>` +
+    `<text x="16" y="35" font-size="17" font-family="Georgia,serif" fill="${tc}" text-anchor="middle">♠</text>` +
+    `</svg>`;
+}
 
 const PLAYERS = [
   { id:0, name:'Slasher Steve', emoji:'🏴‍☠️', chips:8300, style:'aggressive' },
@@ -2949,10 +2979,10 @@ function checkKnockoutAchievements() {
 // ══ LOBBY / PROGRESSION ══════════════════════════════════════
 
 const TABLES = [
-  { name:'Bronze',      sb:1,    bb:2,    min:20,    max:200,    icon:'🥉' },
-  { name:'Silver',      sb:10,   bb:20,   min:200,   max:2000,   icon:'🥈' },
-  { name:'Gold',        sb:100,  bb:200,  min:2000,  max:20000,  icon:'🥇' },
-  { name:'Diamond',     sb:1000, bb:2000, min:20000, max:200000, icon:'💎' },
+  { name:'Bronze',      sb:1,    bb:2,    min:20,    max:200,    icon:tableCardIcon('#cd7f32', false) },
+  { name:'Silver',      sb:10,   bb:20,   min:200,   max:2000,   icon:tableCardIcon('#c0c0c0', false, '#8a8a8a') },
+  { name:'Gold',        sb:100,  bb:200,  min:2000,  max:20000,  icon:tableCardIcon('#ffd700', true)  },
+  { name:'Diamond',     sb:1000, bb:2000, min:20000, max:200000, icon:tableCardIcon('#b9f2ff', true, '#2f9fc4') },
 ];
 
 let currentTable = null; // index into TABLES
@@ -3159,7 +3189,7 @@ function sitDown(tableIdx) {
   input.value  = maxAfford;
   document.getElementById('buyin-min-label').textContent = 'Min: ' + fmt(t.min);
   document.getElementById('buyin-max-label').textContent = 'Max: ' + fmt(maxAfford);
-  document.getElementById('buyin-title').textContent = t.icon + ' ' + t.name + ' Table';
+  document.getElementById('buyin-title').textContent = t.name + ' Table';
   document.getElementById('buyin-bankroll-note').textContent = 'Your bankroll: ' + fmt(bankroll) + ' GP';
   document.getElementById('buyin-dialog').style.display = 'flex';
 }
@@ -3206,7 +3236,7 @@ function confirmBuyin() {
 
   // Configure table stakes
   state.minBet = t.bb;
-  document.getElementById('table-name-label').textContent = t.icon + ' ' + t.name + ' Table';
+  document.getElementById('table-name-label').textContent = t.name + ' Table';
 
   // All AI players start with the table max buy-in
   PLAYERS[0].chips = t.max;
@@ -3503,19 +3533,33 @@ function generateCode() {
 }
 
 // ── Create table dialog
+let _ctSelectedTier = 0;
+function renderCtTierOptions() {
+  const container = document.getElementById('ct-tier-options');
+  container.innerHTML = '';
+  let firstAffordable = -1;
+  TABLES.forEach((t, i) => {
+    const canAfford = bankroll >= t.min;
+    if (canAfford && firstAffordable === -1) firstAffordable = i;
+    const opt = document.createElement('div');
+    opt.className = 'ct-tier-option' + (canAfford ? '' : ' disabled');
+    opt.innerHTML = t.icon + `<div>${t.name}</div>`;
+    if (canAfford) opt.onclick = () => selectCtTier(i);
+    container.appendChild(opt);
+  });
+  return firstAffordable;
+}
+function selectCtTier(i) {
+  _ctSelectedTier = i;
+  document.querySelectorAll('#ct-tier-options .ct-tier-option').forEach((el, idx) => {
+    el.classList.toggle('selected', idx === i);
+  });
+}
 function openCreateTable() {
   if (!currentUser) { alert('Please sign in to create a table.'); return; }
   if (!rtdb) { alert('Multiplayer not available — please play on the live site.'); return; }
-  const select = document.getElementById('ct-tier');
-  let firstAffordable = -1;
-  Array.from(select.options).forEach((opt, i) => {
-    const t = TABLES[i];
-    const canAfford = bankroll >= t.min;
-    opt.disabled = !canAfford;
-    opt.style.color = canAfford ? '#f4c84a' : '#555';
-    if (canAfford && firstAffordable === -1) firstAffordable = i;
-  });
-  if (firstAffordable !== -1) select.value = String(firstAffordable);
+  const firstAffordable = renderCtTierOptions();
+  if (firstAffordable !== -1) selectCtTier(firstAffordable);
   else { alert('You don\'t have enough GP to create any table.'); return; }
   document.getElementById('create-table-dialog').style.display = 'flex';
 }
@@ -3530,14 +3574,8 @@ function setTableVisibility(v) {
 
 async function createTable() {
   if (!currentUser || !rtdb) return;
-  const select = document.getElementById('ct-tier');
-  const tierIdx = parseInt(select.value);
+  const tierIdx = _ctSelectedTier;
   const t_check = TABLES[tierIdx];
-  // Double-check selected option isn't disabled
-  if (select.options[tierIdx] && select.options[tierIdx].disabled) {
-    alert('You cannot afford this table.');
-    return;
-  }
   if (bankroll < t_check.min) {
     alert('Not enough GP for this table. You need at least ' + fmt(t_check.min) + ' GP.');
     return;
@@ -4447,15 +4485,18 @@ async function mpAdvancePhase(s) {
   s.bets = {};
   s.highBet = 0;
 
-  // toAct: active non-allin players starting left of dealer
+  // toAct: active non-allin players starting left of dealer (heads-up is a
+  // special case — the dealer posts BB in this table's blind assignment, so
+  // postflop action should start FROM the dealer, not from their left, or
+  // the same player who closed preflop action ends up opening every street).
   const activePids = Array.isArray(s.activePids) ? s.activePids : Object.values(s.activePids || {});
   const folded = s.folded || {};
   const allin  = s.allin  || {};
   const active = activePids.filter(p => !folded[p] && !allin[p]);
-  // Start from player left of dealer
   const dealerPos = activePids.indexOf(s.dealerUid);
+  const startOffset = activePids.length === 2 ? 0 : 1;
   const reordered = [];
-  for (let i = 1; i <= activePids.length; i++) {
+  for (let i = startOffset; i < startOffset + activePids.length; i++) {
     const uid = activePids[(dealerPos + i) % activePids.length];
     if (active.includes(uid)) reordered.push(uid);
   }
