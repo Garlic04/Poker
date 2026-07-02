@@ -3320,6 +3320,94 @@ function mpRequestCashOut() {
   }
 }
 
+// At a genuine showdown, fetch and reveal every player's hand who made it
+// that far (not folded) — mirrors the real-poker "show your cards to win"
+// convention. Every client does this independently rather than relying on
+// the host to broadcast the cards, since the underlying data is already
+// readable by any connected client (nothing changes security-wise; this
+// just makes visible what was always technically fetchable).
+async function mpRevealShowdownHands(s) {
+  const activePids = Array.isArray(s.activePids) ? s.activePids : Object.values(s.activePids || {});
+  const folded = s.folded || {};
+  const showdownPids = activePids.filter(p => !folded[p]);
+
+  const fetches = showdownPids.map(uid =>
+    rtdb.ref(`tables/${mpTableId}/players/${uid}/privateCards`).once('value')
+      .then(snap => ({ uid, cards: snap.val() }))
+      .catch(() => ({ uid, cards: null }))
+  );
+  const results = await Promise.all(fetches);
+
+  results.forEach(({ uid, cards }) => {
+    if (!cards || !cards.c1 || !cards.c2) return;
+    if (uid === mpMyUid) return; // your own hole cards are already shown in the HUD
+    const seatEl = document.querySelector('.seat[data-mp-uid="' + uid + '"]');
+    const container = seatEl && seatEl.querySelector('.seat-cards-offset');
+    if (!container) return;
+    container.innerHTML = '';
+    [cards.c1, cards.c2].forEach(c => {
+      const suit = c.slice(-1);
+      const rank = c.slice(0, -1);
+      const isRed = suit === '♥' || suit === '♦';
+      const div = document.createElement('div');
+      div.className = 'seat-card face-up' + (isRed ? ' red' : '');
+      div.innerHTML = `<span>${rank}</span><span>${suit}</span>`;
+      container.appendChild(div);
+    });
+  });
+}
+
+// Busted in multiplayer — offer to re-buy at the same table (mirrors the
+// singleplayer "Out of Chips" dialog) or cash out with 0 GP.
+function mpShowRebuyPrompt(s) {
+  const t = TABLES[mpTierIdx != null ? mpTierIdx : 0];
+  const canRebuy = bankroll >= t.min;
+  const rebuyAmount = canRebuy ? Math.min(bankroll, t.max) : 0;
+
+  showMessage('Out of Chips', canRebuy
+    ? 'Re-buy to keep playing or cash out.'
+    : 'You have no GP left to re-buy.'
+  );
+
+  const btn  = document.getElementById('message-btn');
+  const btn2 = document.getElementById('message-btn2');
+
+  if (canRebuy) {
+    btn.textContent = 'Re-buy ' + fmt(rebuyAmount) + ' GP';
+    btn.onclick = async () => {
+      bankroll -= rebuyAmount;
+      mpBuyIn += rebuyAmount; // count toward session net, not just the original buy-in
+      playBuyInSound();
+      saveBankroll();
+      document.getElementById('message-overlay').style.display = 'none';
+      btn2.style.display = 'none';
+      try {
+        await rtdb.ref('tables/' + mpTableId + '/players/' + mpMyUid + '/publicInfo/chips').set(rebuyAmount);
+      } catch (e) {
+        console.error('MP rebuy failed:', e);
+        // Refund on failure so the player isn't charged for nothing
+        bankroll += rebuyAmount;
+        mpBuyIn -= rebuyAmount;
+        saveBankroll();
+      }
+    };
+    btn2.textContent = 'Cash Out';
+    btn2.style.display = '';
+    btn2.onclick = () => {
+      document.getElementById('message-overlay').style.display = 'none';
+      btn2.style.display = 'none';
+      mpFinishCashOut(s);
+    };
+  } else {
+    btn.textContent = 'Cash Out';
+    btn.onclick = () => {
+      document.getElementById('message-overlay').style.display = 'none';
+      mpFinishCashOut(s);
+    };
+    btn2.style.display = 'none';
+  }
+}
+
 async function mpFinishCashOut(s) {
   if (_mpCashOutInProgress) return;
   _mpCashOutInProgress = true;
@@ -3330,9 +3418,20 @@ async function mpFinishCashOut(s) {
   saveBankroll();
   try {
     if (mpIsHost) {
-      // Host leaving mid-game closes the table for everyone — full host
-      // hand-off isn't implemented yet, so this is the safe stop-gap.
-      await rtdb.ref('tables/' + mpTableId).remove();
+      // Try to hand off hosting to another player still at the table
+      // instead of closing it out from under everyone.
+      const playersSnap = await rtdb.ref('tables/' + mpTableId + '/players').once('value');
+      const players = playersSnap.val() || {};
+      const others = Object.keys(players).filter(uid => uid !== mpMyUid);
+      if (others.length > 0) {
+        const newHostUid  = others[0];
+        const newHostName = (players[newHostUid].publicInfo && players[newHostUid].publicInfo.name) || 'Player';
+        await rtdb.ref('tables/' + mpTableId + '/config').update({ hostUid: newHostUid, hostName: newHostName });
+        await rtdb.ref('tables/' + mpTableId + '/players/' + mpMyUid).remove();
+      } else {
+        // No one left to hand off to — close the table.
+        await rtdb.ref('tables/' + mpTableId).remove();
+      }
     } else {
       await rtdb.ref('tables/' + mpTableId + '/players/' + mpMyUid).remove();
     }
@@ -3793,6 +3892,12 @@ function enterWaitingRoom(tableId, isHost) {
     if (!snap.exists()) { leaveWaitingRoom(); return; }
     const data = snap.val();
     mpPlayers = data.players || {};
+    // Keep the local host flag in sync for the whole session — if the host
+    // cashes out mid-game and hands off to someone else, that player's
+    // client needs to know it's now responsible for dealing/processing.
+    if (data.config && currentUser) {
+      mpIsHost = (data.config.hostUid === currentUser.uid);
+    }
     if (data.state && data.state.phase === 'playing') {
       if (!_mpGameStarted) {
         _mpGameStarted = true;
@@ -3904,6 +4009,8 @@ let mpStateRef  = null;  // ref to listen to state
 let mpDisconnectRef = null;
 let _mpPrevActionSeq = null;    // for detecting new check/call/bet/raise actions
 let _mpPrevBlindsHand = null;   // hand number we've already animated blinds for
+let _mpBustPromptedForHand = null; // hand number we've already shown the rebuy prompt for
+let _mpRevealedForHand = null;     // hand number we've already revealed showdown hands for
 let _mpWinnerAnimatedForHand = null; // hand number we've already animated pot->winner for
 let _mpStatsCheckedForHand = null;   // hand number we've already updated stats/achievements for
 let _mpPrevHandNum = null;      // hand number we've already dealt opponent card-backs for
@@ -3935,6 +4042,10 @@ function startMPGame(tableData) {
   _mpPrevFolded = {};
   _mpPrevActionSeq = null;
   _mpPrevBlindsHand = null;
+  _mpBustPromptedForHand = null;
+  _mpRevealedForHand = null;
+  _mpHandEndTimer = null;
+  _mpDealNextTimer = null;
 
   const cfg = tableData.config;
   const players = tableData.players || {};
@@ -4349,6 +4460,22 @@ function renderMPState(s, players) {
     mpFinishCashOut(s);
   }
 
+  // Busted — offer a re-buy, same as singleplayer. Without this the player
+  // just silently stops getting dealt into hands (mpDealNewHand skips
+  // anyone with 0 chips) with no explanation and no way back in.
+  const myChipsNow = parseInt((s.chips && s.chips[mpMyUid]) || 0) || 0;
+  if (!_mpPendingCashOut && s.phase === 'between_hands' && myChipsNow === 0 && s.hand !== _mpBustPromptedForHand) {
+    _mpBustPromptedForHand = s.hand;
+    mpShowRebuyPrompt(s);
+  }
+
+  // Reveal hands at genuine showdowns (not fold-wins — nobody's cards get
+  // shown if everyone else just folded, same as real poker etiquette).
+  if (s.phase === 'between_hands' && s.winner && !s.wonByFold && s.hand !== _mpRevealedForHand) {
+    _mpRevealedForHand = s.hand;
+    mpRevealShowdownHands(s);
+  }
+
   // Check if hand ended — only trigger once
   if ((s.phase === 'showdown' || s.phase === 'ended') && !_mpHandEndedCalled) {
     mpHandEnded(s, players);
@@ -4579,12 +4706,15 @@ async function mpAdvancePhase(s) {
 
 let _mpHandEndedCalled = false;
 
+let _mpHandEndTimer = null;  // outer "show result" timer
+let _mpDealNextTimer = null; // inner "deal next hand" timer
+
 function mpHandEnded(s, players) {
   if (!mpIsHost) return;
   if (_mpHandEndedCalled) return;
   _mpHandEndedCalled = true;
 
-  setTimeout(async () => {
+  _mpHandEndTimer = setTimeout(async () => {
     let winnerUid = s.winner;
     let handName = '';
     const handNames = ['High Card','Pair','Two Pair','Three of a Kind','Straight','Flush','Full House','Four of a Kind','Straight Flush','Royal Flush'];
@@ -4644,7 +4774,7 @@ function mpHandEnded(s, players) {
     await rtdb.ref().update(chipUpdates);
 
     // Deal next hand after delay
-    setTimeout(async () => {
+    _mpDealNextTimer = setTimeout(async () => {
       _mpHandEndedCalled = false;
       const snap = await rtdb.ref('tables/' + mpTableId).once('value');
       if (snap.exists()) {
@@ -4707,6 +4837,8 @@ function mpLeaveGame() {
   Object.values(mpTimeoutTimers).forEach(clearTimeout);
   Object.values(mpCountdownIntervals).forEach(clearInterval);
   mpTimeoutTimers = {}; mpCountdownIntervals = {};
+  if (_mpHandEndTimer)  { clearTimeout(_mpHandEndTimer);  _mpHandEndTimer  = null; }
+  if (_mpDealNextTimer) { clearTimeout(_mpDealNextTimer); _mpDealNextTimer = null; }
   mpTableId = null; mpIsHost = false; mpMyUid = null;
   // Restore AI seats
   document.querySelectorAll('.seat').forEach(s => { s.style.display = ''; s.dataset.mpUid = ''; });
