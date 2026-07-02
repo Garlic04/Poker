@@ -2066,7 +2066,7 @@ function nextAction() {
 
   // If only one player hasn't folded, they win immediately
   const remaining = state.activePids.filter(p => !state.folded.has(p));
-  if (remaining.length === 1) { awardPot(remaining); return; }
+  if (remaining.length === 1) { awardPot({ [remaining[0]]: state.pot }); return; }
 
   // Queue empty → street is over
   if (state.toAct.length === 0) { advancePhase(); return; }
@@ -2300,20 +2300,85 @@ function evaluateSimple(cards) {
 // ============================================================
 function showdown() {
   const remaining = state.activePids.filter(p => !state.folded.has(p));
-  if (remaining.length === 1) { awardPot(remaining); return; }
+  if (remaining.length === 1) { awardPot({ [remaining[0]]: state.pot }); return; }
 
   // Reveal all hands
   renderAllHands(true);
 
-  // Find best hand
-  let best = -1, winners = [];
-  for (let pid of remaining) {
-    const all = [...state.hands[pid], ...state.community];
-    const score = getBestHandScore(all);
-    if (score > best) { best = score; winners = [pid]; }
-    else if (score === best) { winners.push(pid); }
+  setTimeout(() => {
+    if (currentTable === null) return;
+    const foldedStrs = new Set([...state.folded].map(String));
+    const pots = computeSidePots(state.totalBets, (pid) => foldedStrs.has(String(pid)));
+    const winnings = distributePots(pots, (pid) => {
+      const all = [...state.hands[pid], ...state.community];
+      return getBestHandScore(all);
+    });
+    awardPot(winnings);
+  }, 1200);
+}
+
+// ── Side pots ────────────────────────────────────────────────────────────
+// Shared by singleplayer and multiplayer. Standard poker side-pot rule: a
+// pot is built at each distinct total-contribution level, sized as (that
+// level minus the previous level) times the number of players who
+// contributed at least that much. Only non-folded players who reached a
+// given level are eligible to win that pot — folded players' money still
+// counts toward pot size, they just can't win it back. A pot with exactly
+// one eligible player is returned to them uncontested (this is what
+// naturally handles an uncalled bet/raise too).
+//
+// totalContributed: { pid: amountContributedThisHand } for every player who
+// put money in, folded or not.
+// isFoldedFn(pid): returns true if that pid folded this hand.
+function computeSidePots(totalContributed, isFoldedFn) {
+  const pids = Object.keys(totalContributed).filter(p => (totalContributed[p] || 0) > 0);
+  if (pids.length === 0) return [];
+  const levels = [...new Set(pids.map(p => totalContributed[p]))].sort((a, b) => a - b);
+
+  const pots = [];
+  let prevLevel = 0;
+  for (const level of levels) {
+    const layerAmount = level - prevLevel;
+    const contributors = pids.filter(p => totalContributed[p] >= level);
+    const potSize = layerAmount * contributors.length;
+    if (potSize > 0) {
+      const eligiblePids = contributors.filter(p => !isFoldedFn(p));
+      pots.push({ amount: potSize, eligiblePids });
+    }
+    prevLevel = level;
   }
-  setTimeout(() => { if (currentTable === null) return; awardPot(winners); }, 1200);
+  return pots;
+}
+
+// scoreFn(pid) => numeric hand-strength score (higher wins). Evaluates each
+// pot independently from smallest to largest contribution level; ties
+// within a pot split it evenly (any remainder GP goes to the first tied
+// winners so nothing is lost to rounding). Returns { pid: totalAmountWon }.
+function distributePots(pots, scoreFn) {
+  const winnings = {};
+  for (const pot of pots) {
+    if (pot.eligiblePids.length === 0) continue;
+    let winnerSet;
+    if (pot.eligiblePids.length === 1) {
+      winnerSet = pot.eligiblePids;
+    } else {
+      let best = -1, ws = [];
+      for (const pid of pot.eligiblePids) {
+        const score = scoreFn(pid);
+        if (score > best) { best = score; ws = [pid]; }
+        else if (score === best) { ws.push(pid); }
+      }
+      winnerSet = ws;
+    }
+    const share = Math.floor(pot.amount / winnerSet.length);
+    let remainder = pot.amount - share * winnerSet.length;
+    for (const pid of winnerSet) {
+      const extra = remainder > 0 ? 1 : 0;
+      if (remainder > 0) remainder--;
+      winnings[pid] = (winnings[pid] || 0) + share + extra;
+    }
+  }
+  return winnings;
 }
 
 function getBestHandScore(cards) {
@@ -2406,24 +2471,29 @@ function animatePotToWinner(winnerSeatId, amount, onComplete) {
   requestAnimationFrame(step);
 }
 
-function awardPot(winners) {
-  const share = Math.floor(state.pot / winners.length);
-  const names = winners.map(p => getPlayerName(p)).join(' & ');
+function awardPot(winnings) {
+  // winnings: { pid: amountWon } — may include multiple winners at
+  // different amounts when side pots are involved, not just an even split.
+  const winnerPids = Object.keys(winnings).filter(p => winnings[p] > 0);
+  const totalAwarded = winnerPids.reduce((sum, p) => sum + winnings[p], 0);
+  const names = winnerPids.map(p => getPlayerName(p)).join(' & ');
   const handNames = ['High Card','Pair','Two Pair','Three of a Kind','Straight','Flush','Full House','Four of a Kind','Straight Flush','Royal Flush'];
   let handName = '';
-  if (winners.length === 1 && state.community.length === 5) {
-    const score = Math.floor(getBestHandScore([...state.hands[winners[0]], ...state.community]) / 1e12);
+  if (winnerPids.length === 1 && state.community.length === 5 && state.hands[winnerPids[0]]) {
+    const score = Math.floor(getBestHandScore([...state.hands[winnerPids[0]], ...state.community]) / 1e12);
     handName = handNames[Math.min(score, 9)] || '';
   }
+
+  const playerShare = winnings[PLAYER_ID] || 0;
 
   // Play the player's own win sound right away — cards are already revealed
   // at this point, so this is the "you won" moment. The coin animation is
   // delayed a beat so the win sound lands first instead of everything
   // happening at once.
   let winDelay = 0;
-  if (winners.includes(PLAYER_ID)) {
+  if (playerShare > 0) {
     const bb = (currentTable !== null && TABLES[currentTable]) ? TABLES[currentTable].bb : 0;
-    playWinSound(isBigWin(share, bb));
+    playWinSound(isBigWin(playerShare, bb));
     winDelay = 700;
   } else if (state.allin && state.allin.has(PLAYER_ID) && _playerChips === 0) {
     // Went all-in and lost — same reveal moment as a win sound would play
@@ -2431,21 +2501,21 @@ function awardPot(winners) {
   }
 
   // Animate coins from pot to each winner, then award chips
-  let pending = winners.length;
+  let pending = winnerPids.length;
   const afterAnimation = () => {
     pending--;
     if (pending > 0) return;
     // Now award chips and update display
-    for (let pid of winners) setChips(pid, getChips(pid) + share);
+    for (let pid of winnerPids) setChips(pid, getChips(pid) + winnings[pid]);
     renderChips();
 
     // Check achievements now that chips are updated (uses the pot amount
     // that was just paid out)
     const playerWentAllin = state.allin && state.allin.has(PLAYER_ID);
-    const everyoneFolded  = winners.length === 1 && winners.includes(PLAYER_ID) &&
+    const everyoneFolded  = winnerPids.length === 1 && winnerPids.includes(PLAYER_ID) &&
       state.activePids.filter(p => !state.folded.has(p)).length === 1;
     checkAchievements({
-      winners, pot: state.pot, playerWentAllin, everyoneFolded, tableIdx: currentTable
+      winners: winnerPids, pot: state.pot, playerWentAllin, everyoneFolded, tableIdx: currentTable
     });
     checkKnockoutAchievements();
 
@@ -2486,8 +2556,8 @@ function awardPot(winners) {
       }
       return;
     }
-    const resultMsg = (winners.includes(PLAYER_ID) ? '🏆 You Win! ' : names + ' Wins! ') +
-      (handName ? '(' + handName + ') ' : '') + fmt(share) + ' GP';
+    const resultMsg = (winnerPids.includes(PLAYER_ID) ? '🏆 You Win! ' : names + ' Wins! ') +
+      (handName ? '(' + handName + ') ' : '') + fmt(totalAwarded) + ' GP';
     setStatus(resultMsg);
     setTimeout(() => {
       if (currentTable === null) return; // player already left — don't resume the game under them
@@ -2544,9 +2614,9 @@ function awardPot(winners) {
 
   setTimeout(() => {
     if (currentTable === null) return; // player left before this fired
-    for (let pid of winners) {
+    for (let pid of winnerPids) {
       const seatId = pid === PLAYER_ID ? 'seat-player' : 'seat-' + pid;
-      animatePotToWinner(seatId, share, afterAnimation);
+      animatePotToWinner(seatId, winnings[pid], afterAnimation);
     }
   }, winDelay);
 }
@@ -4374,6 +4444,9 @@ async function mpDealNewHand(tableData) {
   const bbBet  = Math.min(bb, chips[bbUid]);
   chips[sbUid] -= sbBet;
   chips[bbUid] -= bbBet;
+  const allin = {};
+  if (chips[sbUid] === 0) allin[sbUid] = true;
+  if (chips[bbUid] === 0) allin[bbUid] = true;
 
   // Write new shared state
   const newState = {
@@ -4384,11 +4457,12 @@ async function mpDealNewHand(tableData) {
     sbUid, bbUid,
     pot: sbBet + bbBet,
     bets: { [sbUid]: sbBet, [bbUid]: bbBet },
+    totalBets: { [sbUid]: sbBet, [bbUid]: bbBet }, // cumulative across the whole hand, for side pots
     chips,
     community: [],
     activePids,
     folded: {},
-    allin: {},
+    allin,
     toAct: getPreFlopOrder(activePids, bbIdx),
     highBet: bbBet,
     deck: deck.map(c => c.rank + c.suit), // remaining deck for community cards
@@ -4480,25 +4554,33 @@ function renderMPState(s, players) {
     });
   }
 
-  // Coin animation: pot -> winner, once per hand, right when the hand resolves.
-  // If it's us, play the win sound first and delay the animation a beat so
-  // the win sound lands before the money visibly moves — everyone else just
-  // sees the coins fly immediately, no need to delay it for spectators.
-  if (s.phase === 'between_hands' && s.winner && s.hand !== _mpWinnerAnimatedForHand) {
+  // Coin animation: pot -> winner(s), once per hand, right when the hand
+  // resolves. Side pots can produce more than one winner at different
+  // amounts — each gets their own animation. If it's us, play the win sound
+  // first and delay our own animation a beat so the sound lands before the
+  // money visibly moves; other winners' coins fly immediately, no need to
+  // delay them for spectators.
+  if (s.phase === 'between_hands' && s.winnings && s.hand !== _mpWinnerAnimatedForHand) {
     _mpWinnerAnimatedForHand = s.hand;
-    const winnerSeatId = mpSeatElIdFor(s.winner);
+    const winnerUids = Object.keys(s.winnings).filter(u => s.winnings[u] > 0);
+    const myAmount = s.winnings[mpMyUid] || 0;
     let winDelay = 0;
-    if (s.winner === mpMyUid) {
+    if (myAmount > 0) {
       const bb = (mpTierIdx != null && TABLES[mpTierIdx]) ? TABLES[mpTierIdx].bb : 0;
-      playWinSound(isBigWin(s.wonAmount || 0, bb));
+      playWinSound(isBigWin(myAmount, bb));
       winDelay = 700;
     } else if (s.allin && s.allin[mpMyUid] && parseInt((s.chips && s.chips[mpMyUid]) || 0) === 0) {
       // Went all-in and lost — same reveal moment as a win sound would play
       playBustedOutSound();
     }
-    setTimeout(() => {
-      if (winnerSeatId) animatePotToWinner(winnerSeatId, s.wonAmount || 0, () => {});
-    }, winDelay);
+    winnerUids.forEach(uid => {
+      const seatId = mpSeatElIdFor(uid);
+      const amount = s.winnings[uid];
+      const delay = uid === mpMyUid ? winDelay : 0;
+      setTimeout(() => {
+        if (seatId) animatePotToWinner(seatId, amount, () => {});
+      }, delay);
+    });
   }
 
   // Stats + achievements — singleplayer already does this per-hand via
@@ -4506,12 +4588,13 @@ function renderMPState(s, players) {
   // player's progress was tracked there at all. Each client updates its own
   // local stats here (once per hand) the same way renderMPState already
   // handles everything else per-client.
-  if (s.phase === 'between_hands' && s.winner && s.hand !== _mpStatsCheckedForHand) {
+  if (s.phase === 'between_hands' && s.winnings && s.hand !== _mpStatsCheckedForHand) {
     _mpStatsCheckedForHand = s.hand;
-    const playerWon = s.winner === mpMyUid;
+    const winnerUids = Object.keys(s.winnings).filter(u => s.winnings[u] > 0);
+    const totalPot = winnerUids.reduce((sum, u) => sum + s.winnings[u], 0);
     const playerWentAllin = !!(s.allin && s.allin[mpMyUid]);
     checkAchievements({
-      winners: [s.winner], pot: s.wonAmount || 0,
+      winners: winnerUids, pot: totalPot,
       playerWentAllin, everyoneFolded: !!s.wonByFold,
       tableIdx: mpTierIdx,
     }, mpMyUid);
@@ -4621,7 +4704,7 @@ function renderMPState(s, players) {
 
   // Reveal hands at genuine showdowns (not fold-wins — nobody's cards get
   // shown if everyone else just folded, same as real poker etiquette).
-  if (s.phase === 'between_hands' && s.winner && !s.wonByFold && s.hand !== _mpRevealedForHand) {
+  if (s.phase === 'between_hands' && s.winnings && !s.wonByFold && s.hand !== _mpRevealedForHand) {
     _mpRevealedForHand = s.hand;
     mpRevealShowdownHands(s);
   }
@@ -4733,11 +4816,12 @@ async function mpProcessActionInner(actionData) {
     return;
   }
 
-  const chips   = newState.chips || {};
-  const bets    = newState.bets  || {};
-  const highBet = newState.highBet || 0;
-  const folded  = newState.folded  || {};
-  const allin   = newState.allin   || {};
+  const chips     = newState.chips     || {};
+  const bets      = newState.bets      || {};
+  const totalBets = newState.totalBets || {};
+  const highBet   = newState.highBet   || 0;
+  const folded    = newState.folded    || {};
+  const allin     = newState.allin     || {};
 
   let actionAmount = 0;
   if (action === 'fold') {
@@ -4749,6 +4833,7 @@ async function mpProcessActionInner(actionData) {
     const toCall = Math.min(highBet - (bets[uid]||0), chips[uid]);
     chips[uid]  -= toCall;
     bets[uid]    = (bets[uid]||0) + toCall;
+    totalBets[uid] = (totalBets[uid]||0) + toCall;
     newState.pot += toCall;
     if (chips[uid] === 0) allin[uid] = true;
     newState.toAct.shift();
@@ -4759,6 +4844,7 @@ async function mpProcessActionInner(actionData) {
     chips[uid]  -= (betAmt - prev);
     newState.pot += (betAmt - prev);
     bets[uid]    = betAmt;
+    totalBets[uid] = (totalBets[uid]||0) + (betAmt - prev);
     newState.highBet = betAmt;
     newState.lastRaiseSize = betAmt - prev;
     if (chips[uid] === 0) allin[uid] = true;
@@ -4768,10 +4854,11 @@ async function mpProcessActionInner(actionData) {
     actionAmount = betAmt - prev;
   }
 
-  newState.bets   = bets;
-  newState.chips  = chips;
-  newState.folded = folded;
-  newState.allin  = allin;
+  newState.bets      = bets;
+  newState.totalBets = totalBets;
+  newState.chips     = chips;
+  newState.folded    = folded;
+  newState.allin     = allin;
   newState.lastActionType   = action;
   newState.lastActionUid    = uid;
   newState.lastActionAmount = actionAmount;
@@ -4864,11 +4951,16 @@ function mpHandEnded(s, players) {
   _mpHandEndedCalled = true;
 
   _mpHandEndTimer = setTimeout(async () => {
-    let winnerUid = s.winner;
+    let winnings = {};
     let handName = '';
     const handNames = ['High Card','Pair','Two Pair','Three of a Kind','Straight','Flush','Full House','Four of a Kind','Straight Flush','Royal Flush'];
+    const wonByFold = !!s.winner;
 
-    if (!winnerUid && s.phase === 'showdown') {
+    if (s.winner) {
+      // Everyone else folded — sole remaining player takes the whole pot,
+      // no side-pot math needed since nobody else is contesting it.
+      winnings[s.winner] = s.pot || 0;
+    } else if (s.phase === 'showdown') {
       // Fetch all private cards from Firebase to evaluate hands
       const activePids = Array.isArray(s.activePids) ? s.activePids : Object.values(s.activePids || {});
       const folded = s.folded || {};
@@ -4876,43 +4968,59 @@ function mpHandEnded(s, players) {
       const community = (Array.isArray(s.community) ? s.community : Object.values(s.community || {}))
         .map(c => ({ rank: c.slice(0,-1), suit: c.slice(-1) }));
 
-      // Fetch each player's private cards
+      // Fetch each player's private cards and score their hand
       const cardFetches = active.map(uid =>
         rtdb.ref(`tables/${mpTableId}/players/${uid}/privateCards`).once('value')
           .then(snap => ({ uid, cards: snap.val() }))
       );
       const allCards = await Promise.all(cardFetches);
-
-      let bestScore = -1;
+      const scores = {};
       allCards.forEach(({ uid, cards }) => {
         if (!cards || !cards.c1 || !cards.c2) return;
         const hand = [cards.c1, cards.c2].map(c => ({ rank: c.slice(0,-1), suit: c.slice(-1) }));
-        const score = getBestHandScore([...hand, ...community]);
-        console.log(uid, 'hand score:', score);
-        if (score > bestScore) { bestScore = score; winnerUid = uid; }
+        scores[uid] = getBestHandScore([...hand, ...community]);
+        console.log(uid, 'hand score:', scores[uid]);
       });
-      if (bestScore >= 0) handName = handNames[Math.min(Math.floor(bestScore / 1e12), 9)] || '';
+
+      // Side pots — a player who went all-in for less than others can only
+      // win a "main pot" capped at what they contributed; any excess above
+      // that forms side pots only the bigger stacks compete for.
+      const totalBets = s.totalBets || {};
+      const pots = computeSidePots(totalBets, (pid) => !!folded[pid]);
+      winnings = distributePots(pots, (pid) => (scores[pid] !== undefined ? scores[pid] : -1));
+
+      const winnerUidsForName = Object.keys(winnings).filter(u => winnings[u] > 0);
+      if (winnerUidsForName.length === 1 && scores[winnerUidsForName[0]] !== undefined) {
+        const score = Math.floor(scores[winnerUidsForName[0]] / 1e12);
+        handName = handNames[Math.min(score, 9)] || '';
+      }
     }
 
-    if (!winnerUid) {
+    const winnerUids = Object.keys(winnings).filter(u => winnings[u] > 0);
+    if (winnerUids.length === 0) {
       console.error('No winner found');
       _mpHandEndedCalled = false;
       return;
     }
 
-    console.log('Winner:', winnerUid, 'pot:', s.pot);
+    const totalAwarded = winnerUids.reduce((sum, u) => sum + winnings[u], 0);
+    console.log('Winnings:', winnings, 'total pot:', s.pot);
 
-    const winnerName = (players[winnerUid] && players[winnerUid].publicInfo && players[winnerUid].publicInfo.name) || 'Player';
-    const resultMsg = '🏆 ' + winnerName + ' Wins! ' + (handName ? '(' + handName + ') ' : '') + fmt(s.pot || 0) + ' GP';
+    const names = winnerUids
+      .map(u => (players[u] && players[u].publicInfo && players[u].publicInfo.name) || 'Player')
+      .join(' & ');
+    const resultMsg = '🏆 ' + names + ' Wins! ' + (handName ? '(' + handName + ') ' : '') + fmt(totalAwarded) + ' GP';
 
-    // Award pot
+    // Award pot(s)
     const chips = typeof s.chips === 'object' ? s.chips : {};
     const newChips = { ...chips };
-    newChips[winnerUid] = (parseInt(newChips[winnerUid]) || 0) + (s.pot || 0);
+    winnerUids.forEach(uid => {
+      newChips[uid] = (parseInt(newChips[uid]) || 0) + winnings[uid];
+    });
 
     // Write winner state
     await rtdb.ref(`tables/${mpTableId}/state`).update({
-      chips: newChips, pot: 0, phase: 'between_hands', winner: winnerUid, toAct: [], resultMsg, wonAmount: s.pot || 0, wonByFold: s.phase !== 'showdown'
+      chips: newChips, pot: 0, phase: 'between_hands', winnings, toAct: [], resultMsg, wonByFold
     });
 
     // Update chips in player publicInfo
