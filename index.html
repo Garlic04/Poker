@@ -1864,7 +1864,7 @@ function initHand() {
 
   renderAll();
 
-  setTimeout(() => startPreflop(), 600);
+  setTimeout(() => { if (currentTable === null) return; startPreflop(); }, 600);
 }
 
 function postBlind(pid, amount) {
@@ -2009,17 +2009,17 @@ function advancePhase() {
     state.phase = 'flop';
     state.community.push(state.deck.pop(), state.deck.pop(), state.deck.pop());
     renderCommunity(); setStatus('— Flop —');
-    setTimeout(startBettingRound, 700);
+    setTimeout(() => { if (currentTable === null) return; startBettingRound(); }, 700);
   } else if (state.phase === 'flop') {
     state.phase = 'turn';
     state.community.push(state.deck.pop());
     renderCommunity(); setStatus('— Turn —');
-    setTimeout(startBettingRound, 700);
+    setTimeout(() => { if (currentTable === null) return; startBettingRound(); }, 700);
   } else if (state.phase === 'turn') {
     state.phase = 'river';
     state.community.push(state.deck.pop());
     renderCommunity(); setStatus('— River —');
-    setTimeout(startBettingRound, 700);
+    setTimeout(() => { if (currentTable === null) return; startBettingRound(); }, 700);
   } else {
     showdown();
   }
@@ -2229,7 +2229,7 @@ function showdown() {
     if (score > best) { best = score; winners = [pid]; }
     else if (score === best) { winners.push(pid); }
   }
-  setTimeout(() => awardPot(winners), 1200);
+  setTimeout(() => { if (currentTable === null) return; awardPot(winners); }, 1200);
 }
 
 function getBestHandScore(cards) {
@@ -2340,9 +2340,9 @@ function awardPot(winners) {
     // Now award chips and update display
     for (let pid of winners) setChips(pid, getChips(pid) + share);
     renderChips();
-    renderPot();
 
-    // Check achievements now that chips are updated
+    // Check achievements now that chips are updated (uses the pot amount
+    // that was just paid out)
     const playerWentAllin = state.allin && state.allin.has(PLAYER_ID);
     const everyoneFolded  = winners.length === 1 && winners.includes(PLAYER_ID) &&
       state.activePids.filter(p => !state.folded.has(p)).length === 1;
@@ -2350,6 +2350,12 @@ function awardPot(winners) {
       winners, pot: state.pot, playerWentAllin, everyoneFolded, tableIdx: currentTable
     });
     checkKnockoutAchievements();
+
+    // Clear the pot visually now that it's actually been paid out — without
+    // this it just sat there showing the old total until the next hand
+    // dealt, even though the coins had already flown to the winner.
+    state.pot = 0;
+    renderPot();
 
     const activePidsNext = [0,3,4,PLAYER_ID,2,1].filter(pid =>
       pid === PLAYER_ID ? _playerChips > 0 : PLAYERS[pid].chips > 0
@@ -2386,6 +2392,7 @@ function awardPot(winners) {
       (handName ? '(' + handName + ') ' : '') + fmt(share) + ' GP';
     setStatus(resultMsg);
     setTimeout(() => {
+      if (currentTable === null) return; // player already left — don't resume the game under them
       if (_pendingCashOut) { leaveTable(); return; }
       if (_playerChips === 0 && currentTable !== null) {
         const t = TABLES[currentTable];
