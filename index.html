@@ -2405,6 +2405,7 @@ function awardPot(winners) {
           btn.textContent = 'Re-buy ' + fmt(rebuyAmount) + ' GP';
           btn.onclick = () => {
             bankroll -= rebuyAmount;
+            tableBuyIn += rebuyAmount; // count toward session net, not just the original buy-in
             _playerChips = rebuyAmount;
             playBuyInSound();
             saveBankroll();
@@ -3122,6 +3123,13 @@ function showLobby() {
   document.getElementById('lobby-hint').style.display   = (mpMode === 'solo' && !broke) ? 'block' : 'none';
   document.getElementById('mp-lobby').style.display     = mpMode === 'multi' ? 'flex' : 'none';
   document.getElementById('message-overlay').style.display = 'none';
+
+  // The public-tables listener gets torn down the moment you enter a table
+  // (waiting room or game) so it's not doing pointless work in the
+  // background. Nothing was ever re-establishing it on the way back out —
+  // cashing out, leaving a waiting room, etc. all landed back here with a
+  // frozen list that only refreshed if you happened to flip lobby tabs.
+  if (mpMode === 'multi' && currentUser && rtdb) listenPublicTables();
 
   // Update coin src
   document.getElementById('lobby-coin').src = POE_SRC;
@@ -3894,14 +3902,13 @@ let mpSeats  = [];       // ordered array of uids
 let mpActionRef = null;  // ref to write my actions
 let mpStateRef  = null;  // ref to listen to state
 let mpDisconnectRef = null;
-let _mpPrevBets = {};           // for detecting bet->pot coin animations
-let _mpPrevPhase = null;
+let _mpPrevActionSeq = null;    // for detecting new check/call/bet/raise actions
+let _mpPrevBlindsHand = null;   // hand number we've already animated blinds for
 let _mpWinnerAnimatedForHand = null; // hand number we've already animated pot->winner for
 let _mpStatsCheckedForHand = null;   // hand number we've already updated stats/achievements for
 let _mpPrevHandNum = null;      // hand number we've already dealt opponent card-backs for
 let _mpPrevCommunityLen = 0;    // how many community cards were showing last render
 let _mpPrevFolded = {};         // for detecting new folds (played for every connected client)
-let _mpPrevActionSeq = null;    // for detecting new check actions
 
 function mpSeatElIdFor(uid) {
   const el = document.querySelector('.seat[data-mp-uid="' + uid + '"]');
@@ -3921,14 +3928,13 @@ function startMPGame(tableData) {
   _mpProcessingAction = false;
   _mpPendingCashOut = false;
   _mpCashOutInProgress = false;
-  _mpPrevBets = {};
-  _mpPrevPhase = null;
   _mpWinnerAnimatedForHand = null;
   _mpStatsCheckedForHand = null;
   _mpPrevHandNum = null;
   _mpPrevCommunityLen = 0;
   _mpPrevFolded = {};
   _mpPrevActionSeq = null;
+  _mpPrevBlindsHand = null;
 
   const cfg = tableData.config;
   const players = tableData.players || {};
@@ -3947,7 +3953,21 @@ function startMPGame(tableData) {
   // Listen for state changes
   mpStateRef = rtdb.ref('tables/' + mpTableId + '/state');
   mpStateRef.on('value', snap => {
-    if (!snap.exists()) { mpLeaveGame(); return; }
+    if (!snap.exists()) {
+      // Table vanished out from under us — the other player cashed out and
+      // closed it (host), or it auto-closed because too few players were
+      // left to continue — rather than through our own deliberate cash-out.
+      // Without this, our remaining chips (and any resulting win/loss)
+      // would just silently vanish with nothing credited or recorded.
+      if (!_mpCashOutInProgress && mpState) {
+        const lastChips = parseInt((mpState.chips && mpState.chips[mpMyUid]) || 0) || 0;
+        recordResult(lastChips - mpBuyIn);
+        bankroll += lastChips;
+        saveBankroll();
+      }
+      mpLeaveGame();
+      return;
+    }
     const s = snap.val();
     mpState = s;
     renderMPState(s, players);
@@ -4171,13 +4191,23 @@ function renderMPState(s, players) {
     _mpPrevFolded = { ...curFolded };
   }
 
-  // Check sound — checks don't change chips/bets/folded, so they need their
-  // own change-detector (a sequence number bumped on every processed action).
+  // Check / call / bet / raise sound + seat->pot animation — driven by the
+  // action itself (lastActionType/Uid/Amount, bumped once per processed
+  // action) rather than by diffing 'bets'. Diffing 'bets' missed calls that
+  // triggered an all-in cascade straight through to showdown, because the
+  // intermediate bet was reset by later streets before any client ever saw
+  // it; a single explicit signal also avoids two separate detectors being
+  // able to independently misfire for the same action.
   if (s.lastActionSeq === undefined) {
     _mpPrevActionSeq = null; // fresh hand, nothing processed yet
   } else {
-    if (s.lastActionType === 'check' && s.lastActionSeq !== _mpPrevActionSeq) {
-      playCheckSound();
+    if (s.lastActionSeq !== _mpPrevActionSeq) {
+      if (s.lastActionType === 'check') {
+        playCheckSound();
+      } else if ((s.lastActionType === 'call' || s.lastActionType === 'bet' || s.lastActionType === 'raise') && s.lastActionAmount > 0) {
+        const seatId = mpSeatElIdFor(s.lastActionUid);
+        if (seatId) animateCoinToPot(seatId, s.lastActionAmount);
+      }
     }
     _mpPrevActionSeq = s.lastActionSeq;
   }
@@ -4189,31 +4219,19 @@ function renderMPState(s, players) {
     document.getElementById('chips-player').textContent = (myAllin && _playerChips === 0) ? 'All In' : fmt(_playerChips);
   }
 
-  // Coin animation: seat -> pot whenever a bet increases (blinds, calls, raises).
-  // Only ever animate during actual betting streets — the 'bets' field still
-  // holds leftover river amounts once a hand ends, and without this guard
-  // that leftover would misread as a fresh bet for both players (including
-  // the loser) the moment the hand resolved.
-  const bettingPhases = ['preflop', 'flop', 'turn', 'river'];
-  if (s.phase !== _mpPrevPhase) {
-    // Only a brand-new hand (preflop) should restart the comparison from
-    // zero, so blinds animate in. Any other transition just carries the
-    // existing bets forward with nothing to animate.
-    _mpPrevBets = (s.phase === 'preflop') ? {} : { ...(s.bets || {}) };
-  }
-  if (bettingPhases.includes(s.phase)) {
-    const curBets = s.bets || {};
-    Object.keys(curBets).forEach(uid => {
-      const newBet = parseInt(curBets[uid]) || 0;
-      const oldBet = parseInt(_mpPrevBets[uid]) || 0;
-      if (newBet > oldBet) {
-        const seatId = mpSeatElIdFor(uid);
-        if (seatId) animateCoinToPot(seatId, newBet - oldBet);
-      }
+  // Blinds are posted directly when a hand is dealt (never go through
+  // mpProcessAction), so they need their own one-time animation, keyed off
+  // the same "new hand" detection used for dealing card-backs below.
+  if (s.phase === 'preflop' && s.hand !== _mpPrevBlindsHand) {
+    _mpPrevBlindsHand = s.hand;
+    const bets = s.bets || {};
+    Object.keys(bets).forEach(uid => {
+      const amt = parseInt(bets[uid]) || 0;
+      if (amt <= 0) return;
+      const seatId = mpSeatElIdFor(uid);
+      if (seatId) animateCoinToPot(seatId, amt);
     });
   }
-  _mpPrevBets = { ...(s.bets || {}) };
-  _mpPrevPhase = s.phase;
 
   // Coin animation: pot -> winner, once per hand, right when the hand resolves
   if (s.phase === 'between_hands' && s.winner && s.hand !== _mpWinnerAnimatedForHand) {
@@ -4445,6 +4463,7 @@ async function mpProcessActionInner(actionData) {
   const folded  = newState.folded  || {};
   const allin   = newState.allin   || {};
 
+  let actionAmount = 0;
   if (action === 'fold') {
     folded[uid] = true;
     newState.toAct.shift();
@@ -4457,6 +4476,7 @@ async function mpProcessActionInner(actionData) {
     newState.pot += toCall;
     if (chips[uid] === 0) allin[uid] = true;
     newState.toAct.shift();
+    actionAmount = toCall;
   } else if (action === 'bet' || action === 'raise') {
     const betAmt = Math.min(amount, chips[uid]);
     const prev   = bets[uid] || 0;
@@ -4469,14 +4489,17 @@ async function mpProcessActionInner(actionData) {
     // Re-open to others
     const others = newState.activePids.filter(p => !folded[p] && !allin[p] && p !== uid);
     newState.toAct = [...others];
+    actionAmount = betAmt - prev;
   }
 
   newState.bets   = bets;
   newState.chips  = chips;
   newState.folded = folded;
   newState.allin  = allin;
-  newState.lastActionType = action;
-  newState.lastActionSeq  = (mpState.lastActionSeq || 0) + 1;
+  newState.lastActionType   = action;
+  newState.lastActionUid    = uid;
+  newState.lastActionAmount = actionAmount;
+  newState.lastActionSeq    = (mpState.lastActionSeq || 0) + 1;
 
   // Clear processed action
   await rtdb.ref(`tables/${mpTableId}/actions/${uid}`).remove();
