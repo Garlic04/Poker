@@ -2041,7 +2041,7 @@ function finishAction(wasBetOrRaise) {
   scheduleNext(400);
 }
 
-function playerAction(action) {
+function spPlayerAction(action) {
   if (!state.playerTurn) return;
   state.playerTurn = false;
   showPlayerControls(false);
@@ -2056,7 +2056,7 @@ function playerAction(action) {
     playFoldSound();
 
   } else if (action === 'check') {
-    if (toCall > 0) { state.playerTurn = true; showLiveMode(); return; }
+    if (toCall > 0) { state.playerTurn = true; showPlayerControls(true); return; }
     showActionBubble('seat-player', 'Check');
     playCheckSound();
 
@@ -3602,6 +3602,7 @@ let _mpCashOutInProgress = false;
 let mpTableRef = null;
 let mpIsHost = false;
 let mpTableVisibility = 'public';
+let _mpJoinOrCreateInFlight = false; // guards against double-click double-charging the buy-in
 let mpPlayers = {}; // uid -> player data
 let mpDisconnectTimers = {}; // uid -> timer
 let mpPublicTablesRef = null;
@@ -3689,12 +3690,17 @@ function setTableVisibility(v) {
 
 async function createTable() {
   if (!currentUser || !rtdb) return;
+  if (_mpJoinOrCreateInFlight) return; // block double-clicks from double-charging the buy-in
   const tierIdx = _ctSelectedTier;
   const t_check = TABLES[tierIdx];
   if (bankroll < t_check.min) {
     alert('Not enough GP for this table. You need at least ' + fmt(t_check.min) + ' GP.');
     return;
   }
+  _mpJoinOrCreateInFlight = true;
+  const createBtn = document.getElementById('btn-ct-create');
+  if (createBtn) createBtn.disabled = true;
+  try {
   const maxPlayers = parseInt(document.getElementById('ct-maxplayers').value);
   const t          = TABLES[tierIdx];
   const code       = generateCode();
@@ -3734,12 +3740,17 @@ async function createTable() {
   playBuyInSound();
   saveBankroll();
 
+  let createFailed = false;
   await rtdb.ref('tables/' + tableId).set(tableData).catch(err => {
     console.error('Failed to create table:', err);
     alert('Failed to create table: ' + err.message + '\n\nCheck Firebase rules allow authenticated writes.');
     bankroll += buyIn; saveBankroll(); // refund
-    return;
+    createFailed = true;
   });
+  // The .catch() callback's own "return" only exits that callback, not this
+  // function — without this check, a failed write still let the user carry
+  // on into the waiting room for a table that was never actually created.
+  if (createFailed) return;
 
   // Keep a lightweight public index so other users can browse open tables
   // (they don't have read access to the full /tables tree, which also
@@ -3755,6 +3766,10 @@ async function createTable() {
 
   closeCreateTable();
   enterWaitingRoom(tableId, true);
+  } finally {
+    _mpJoinOrCreateInFlight = false;
+    if (createBtn) createBtn.disabled = false;
+  }
 }
 
 // ── Join by code
@@ -3778,6 +3793,9 @@ async function joinByCode() {
 
 async function joinTable(tableId) {
   if (!currentUser || !rtdb) return;
+  if (_mpJoinOrCreateInFlight) return; // block double-clicks from double-charging the buy-in
+  _mpJoinOrCreateInFlight = true;
+  try {
   const snap = await rtdb.ref('tables/' + tableId).once('value');
   if (!snap.exists()) {
     document.getElementById('join-code-status').textContent = 'Table not found.';
@@ -3832,6 +3850,9 @@ async function joinTable(tableId) {
 
   closeJoinCode();
   enterWaitingRoom(tableId, false);
+  } finally {
+    _mpJoinOrCreateInFlight = false;
+  }
 }
 
 // ── Public tables listener
@@ -3948,8 +3969,12 @@ function copyTableCode() {
   });
 }
 
+let _mpLeavingWaitingRoom = false;
 async function leaveWaitingRoom() {
   if (!mpTableId || !currentUser || !rtdb) { showLobby(); return; }
+  if (_mpLeavingWaitingRoom) return; // guards against double-click double-crediting bankroll
+  _mpLeavingWaitingRoom = true;
+  try {
   // Return chips to bankroll
   const snap = await rtdb.ref('tables/' + mpTableId + '/players/' + currentUser.uid + '/publicInfo/chips').once('value');
   if (snap.exists()) { bankroll += snap.val(); saveBankroll(); }
@@ -3971,6 +3996,9 @@ async function leaveWaitingRoom() {
   document.getElementById('mp-waiting').style.display = 'none';
   document.getElementById('game-container').classList.add('lobby-active');
   showLobby();
+  } finally {
+    _mpLeavingWaitingRoom = false;
+  }
 }
 
 // ── Start multiplayer game (host triggers)
@@ -4536,7 +4564,6 @@ function mpSubmitAction(action, amount) {
 }
 
 // ── Override playerAction for MP
-const _origPlayerAction = playerAction;
 function playerAction(action) {
   if (mpTableId) {
     // MP mode — submit action to Firebase
@@ -4546,7 +4573,7 @@ function playerAction(action) {
     }
     mpSubmitAction(action, amount);
   } else {
-    _origPlayerAction(action);
+    spPlayerAction(action);
   }
 }
 
