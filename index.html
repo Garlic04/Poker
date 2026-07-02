@@ -2448,8 +2448,17 @@ function aiAction(pid) {
   let wasBetOrRaise = false;
 
   if (toCall === 0) {
-    // Can check or bet
-    if (strength > 0.7 || (style === 'aggressive' && r < 0.35 * factor)) {
+    // Can check or bet. Betting frequency ramps up smoothly with hand
+    // strength instead of a single hard cutoff — these thresholds are
+    // calibrated against the *corrected* strength scale (0.40=pair,
+    // 0.55=two pair, 0.65=trips, 0.76=straight, ...). The old 0.7 cutoff
+    // was tuned against a buggy scale that used to hand out inflated
+    // scores from shared board pairs; against the real scale that
+    // required a straight-or-better to ever value-bet, which is why
+    // nobody was betting once the strength bug got fixed.
+    const valueBetChance = Math.max(0, Math.min(0.9, (strength - 0.35) / 0.45));
+    const bluffChance = style === 'aggressive' ? 0.3 * factor : (style === 'loose' ? 0.1 * factor : 0.04 * factor);
+    if (r < valueBetChance + bluffChance) {
       // Size the bet as a fraction of the pot, scaled to a round multiple of
       // the table's own big blind — a flat 100-GP rounding step (and a
       // hardcoded 200 fallback) meant this always rounded down to 0 for
@@ -2458,7 +2467,7 @@ function aiAction(pid) {
       // That 200 was trivial at a high-stakes table and an instant all-in
       // at a low-stakes one.
       const bb = state.minBet || 200;
-      const rawBet = state.pot * (0.25 + Math.random() * 0.35);
+      const rawBet = state.pot * (0.15 + Math.random() * 0.2);
       const betAmt = Math.min(Math.max(bb, Math.round(rawBet / bb) * bb), myChips);
       placeBet(pid, betAmt);
       state.highBet = Math.max(state.highBet, state.bets[pid]);
@@ -2473,12 +2482,15 @@ function aiAction(pid) {
   } else {
     // Must call, raise, or fold
     const callEV = strength - potOdds;
-    if (strength > 0.75 && r < 0.6) {
+    // Raise frequency ramps up from around two pair, same reasoning as the
+    // bet threshold above.
+    const raiseChance = Math.max(0, Math.min(0.8, (strength - 0.55) / 0.35));
+    if (r < raiseChance) {
       // Raise — same table-scaled sizing as the initial bet above, instead
       // of a hardcoded 200 minimum that's trivial at high stakes and huge
       // at low stakes.
       const bb = state.minBet || 200;
-      const raiseExtra = Math.max(bb, Math.round(state.pot * 0.45 / bb) * bb);
+      const raiseExtra = Math.max(bb, Math.round(state.pot * 0.3 / bb) * bb);
       const amount = Math.min(toCall + raiseExtra, myChips);
       placeBet(pid, amount);
       const newHighBet = state.bets[pid];
@@ -2491,7 +2503,7 @@ function aiAction(pid) {
         state.highBet = Math.max(state.highBet, newHighBet);
       }
       showActionBubble(seatId, getChips(pid) === 0 ? 'All-In!' : 'Raise');
-    } else if (callEV > -0.1 * factor || (style === 'loose' && r < 0.35 * factor) || (style === 'aggressive' && r < 0.3 * factor)) {
+    } else if (callEV > -0.03 * factor || (style === 'loose' && r < 0.35 * factor) || (style === 'aggressive' && r < 0.3 * factor)) {
       // Call
       const amount = Math.min(toCall, myChips);
       placeBet(pid, amount);
