@@ -3754,7 +3754,8 @@ if (auth) { auth.onAuthStateChanged(async user => {
     await recoverSession();
     updatePlayerInfoBar();
     renderProfile();
-    showLobby();
+    const resumed = await tryResumeMPSession();
+    if (!resumed) showLobby();
   }
 });
 } else {
@@ -3788,6 +3789,49 @@ let mpTableListener = null;
 let DISCONNECT_TIMEOUT = 45000;
 
 // ── Mode switching
+// ── Resume an in-progress MP session after a page reload/reconnect. Without
+// this, refreshing mid-game just drops the player back at the lobby with no
+// way back into their seat — their disconnect timer would eventually strip
+// them from the table entirely even though they're right there trying to
+// get back in.
+async function tryResumeMPSession() {
+  let savedTableId;
+  try { savedTableId = localStorage.getItem('pirate_poker_mp_table'); } catch (e) { return false; }
+  if (!savedTableId || !currentUser || !rtdb) return false;
+
+  try {
+    const snap = await rtdb.ref('tables/' + savedTableId).once('value');
+    if (!snap.exists()) { localStorage.removeItem('pirate_poker_mp_table'); return false; }
+    const data = snap.val();
+    if (!data.players || !data.players[currentUser.uid]) {
+      localStorage.removeItem('pirate_poker_mp_table');
+      return false;
+    }
+
+    // Mark ourselves connected again — this cancels any disconnect
+    // countdown other clients may have started against us, and re-arms the
+    // hook for next time we actually disconnect.
+    const connRef = rtdb.ref('tables/' + savedTableId + '/players/' + currentUser.uid + '/publicInfo/connected');
+    await connRef.set(true).catch(() => {});
+
+    mpMode = 'multi';
+    const isHost = data.config && data.config.hostUid === currentUser.uid;
+    if (data.state && data.state.phase === 'playing') {
+      mpTableId = savedTableId;
+      mpIsHost = isHost;
+      document.getElementById('lobby').style.display = 'none';
+      document.getElementById('game-container').classList.remove('lobby-active');
+      startMPGame(data);
+    } else {
+      enterWaitingRoom(savedTableId, isHost);
+    }
+    return true;
+  } catch (e) {
+    console.error('Failed to resume MP session:', e);
+    return false;
+  }
+}
+
 function switchMode(mode) {
   mpMode = mode;
   document.getElementById('tab-solo').classList.toggle('active', mode === 'solo');
@@ -4077,6 +4121,7 @@ function stopListeningPublicTables() {
 function enterWaitingRoom(tableId, isHost) {
   mpTableId = tableId;
   mpIsHost  = isHost;
+  try { localStorage.setItem('pirate_poker_mp_table', tableId); } catch (e) { /* ignore */ }
   stopListeningPublicTables();
   document.getElementById('lobby').style.display = 'none';
   document.getElementById('game-container').classList.remove('lobby-active');
@@ -4152,6 +4197,7 @@ async function leaveWaitingRoom() {
   if (!mpTableId || !currentUser || !rtdb) { showLobby(); return; }
   if (_mpLeavingWaitingRoom) return; // guards against double-click double-crediting bankroll
   _mpLeavingWaitingRoom = true;
+  try { localStorage.removeItem('pirate_poker_mp_table'); } catch (e) { /* ignore */ }
   try {
   // Return chips to bankroll
   const snap = await rtdb.ref('tables/' + mpTableId + '/players/' + currentUser.uid + '/publicInfo/chips').once('value');
@@ -5046,13 +5092,18 @@ function mpHandEnded(s, players) {
 function mpHandleDisconnect(uid) {
   if (mpTimeoutTimers[uid]) return; // already counting down
   let remaining = MP_TIMEOUT / 1000;
-  mpCountdownIntervals[uid] = setInterval(() => {
+  mpCountdownIntervals[uid] = setInterval(async () => {
     remaining--;
     showDisconnectTimer(uid, remaining);
     if (remaining <= 0) {
       clearInterval(mpCountdownIntervals[uid]);
       delete mpCountdownIntervals[uid];
-      mpAutoFoldDisconnected(uid);
+      // If the disconnected player was hosting, their own client obviously
+      // can't hand things off — every other connected client's timer fires
+      // this too, but the selection is deterministic so it's safe even if
+      // several of them attempt it at once.
+      await mpTakeOverHostIfDisconnected(uid);
+      await mpAutoFoldDisconnected(uid);
     }
   }, 1000);
 }
@@ -5071,14 +5122,63 @@ function showDisconnectTimer(uid, seconds) {
   if (seconds <= 0) timer.remove();
 }
 
+// If the disconnected player was hosting, promote another connected player
+// so the game doesn't stall — dealing, action processing, and hand
+// resolution are all gated on mpIsHost, so with nobody else ever taking
+// that flag, the table would just freeze for everyone left.
+async function mpTakeOverHostIfDisconnected(disconnectedUid) {
+  if (!mpTableId || !currentUser) return;
+  try {
+    const tableSnap = await rtdb.ref('tables/' + mpTableId).once('value');
+    const tableData = tableSnap.val();
+    if (!tableData) return;
+    const cfg = tableData.config;
+    if (!cfg || cfg.hostUid !== disconnectedUid) return; // already reassigned, or wasn't host
+
+    const players = tableData.players || {};
+    // Deterministic pick (sorted uid order) so every connected client's
+    // redundant attempt converges on the exact same choice.
+    const candidates = Object.keys(players)
+      .filter(uid => uid !== disconnectedUid &&
+        players[uid].publicInfo && players[uid].publicInfo.connected !== false)
+      .sort();
+    if (candidates.length === 0) return; // nobody left to take over
+
+    const newHostUid  = candidates[0];
+    const newHostName = (players[newHostUid].publicInfo && players[newHostUid].publicInfo.name) || 'Player';
+    await rtdb.ref('tables/' + mpTableId + '/config').update({ hostUid: newHostUid, hostName: newHostName });
+
+    if (newHostUid === currentUser.uid) {
+      // Update our own local flag immediately rather than waiting for the
+      // listener echo, so the host-only cleanup right after this sees it.
+      mpIsHost = true;
+      // If a hand was mid-transition when the old host vanished, the timer
+      // that would've dealt the next hand may never fire now (it lived on
+      // a browser tab that's gone) — deal it ourselves so the table
+      // doesn't get stuck sitting at "between hands" forever.
+      if (mpState && mpState.phase === 'between_hands' && !_mpDealingHand) {
+        const freshSnap = await rtdb.ref('tables/' + mpTableId).once('value');
+        if (freshSnap.exists()) mpDealNewHand(freshSnap.val());
+      }
+    }
+  } catch (e) { console.error('mpTakeOverHostIfDisconnected error:', e); }
+}
+
 async function mpAutoFoldDisconnected(uid) {
-  if (!mpIsHost) return;
+  if (!mpTableId || !currentUser) return;
+  // Re-check host status fresh from Firebase rather than relying on the
+  // local mpIsHost flag — we may have only just taken over hosting a
+  // moment ago (see mpTakeOverHostIfDisconnected above).
+  const cfgSnap = await rtdb.ref('tables/' + mpTableId + '/config').once('value');
+  const cfg = cfgSnap.val();
+  if (!cfg || cfg.hostUid !== currentUser.uid) return;
+
   // Cash out their chips to their bankroll in Firestore
   const chips = mpState?.chips?.[uid] || 0;
   if (chips > 0 && db) {
     await db.collection('players').doc(uid).update({
       bankroll: firebase.firestore.FieldValue.increment(chips)
-    });
+    }).catch(() => {});
   }
   // Remove from table and fold them
   await rtdb.ref(`tables/${mpTableId}/players/${uid}`).remove();
@@ -5089,6 +5189,7 @@ async function mpAutoFoldDisconnected(uid) {
 
 // ── Leave multiplayer game
 function mpLeaveGame() {
+  try { localStorage.removeItem('pirate_poker_mp_table'); } catch (e) { /* ignore */ }
   if (mpStateRef) { mpStateRef.off(); mpStateRef = null; }
   if (mpTableRef) { mpTableRef.off(); mpTableRef = null; }
   Object.values(mpTimeoutTimers).forEach(clearTimeout);
