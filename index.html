@@ -1505,7 +1505,7 @@
         <div class="lobby-table-icon"><svg width="32" height="44" viewBox="0 0 32 44" xmlns="http://www.w3.org/2000/svg" style="filter: drop-shadow(0 0 4px #b9f2ff88);"><rect x="1" y="1" width="30" height="42" rx="4" ry="4" fill="#1a1a1a" stroke="#b9f2ff" stroke-width="2"/><text x="16" y="20" font-size="14" font-family="Georgia,serif" font-weight="bold" fill="#b9f2ff" text-anchor="middle">A</text><text x="16" y="35" font-size="17" font-family="Georgia,serif" fill="#b9f2ff" text-anchor="middle">♠</text></svg></div>
         <div class="lobby-table-info">
           <div class="lobby-table-name">Diamond Table</div>
-          <div class="lobby-table-buyin">Buy-in: 20,000 – 200,000 GP</div>
+          <div class="lobby-table-buyin">Buy-in: 20,000 – 200k GP</div>
           <div class="lobby-table-stakes">Blinds: 1,000 / 2,000 GP</div>
         </div>
         <div class="lobby-table-badge" id="ltbadge-3">Play</div>
@@ -2085,6 +2085,13 @@ function animateCoinToPot(fromSeatId, amount) {
 
 // Format numbers with commas
 function fmt(n) { return Math.floor(Math.abs(n)).toLocaleString(); }
+// Compact display for large pot/buy-in amounts — 100,000+ shows as "100k",
+// 1,415,000 as "1,415k", etc. Regular fmt() below that threshold.
+function fmtCompact(n) {
+  const abs = Math.floor(Math.abs(n));
+  if (abs >= 100000) return Math.round(abs / 1000).toLocaleString() + 'k';
+  return abs.toLocaleString();
+}
 function fmtSigned(n) { const v = Math.floor(n); return (v >= 0 ? '+' : '-') + Math.abs(v).toLocaleString(); }
 
 const PLAYER_ID = 'player';
@@ -2193,7 +2200,7 @@ function setChips(pid, v) {
   const inHand = !!(state.activePids && state.activePids.length > 0);
   if (pid === PLAYER_ID) {
     _playerChips = val;
-    document.getElementById('chips-player').textContent = (inHand && val === 0) ? 'All In' : fmt(val);
+    document.getElementById('chips-player').textContent = (inHand && val === 0) ? 'All In' : fmtCompact(val);
   } else {
     PLAYERS[pid].chips = val;
     const el = document.getElementById('chips-' + pid);
@@ -2202,7 +2209,7 @@ function setChips(pid, v) {
         const stillInHand = inHand && state.activePids.includes(pid);
         el.textContent = stillInHand ? 'All In' : 'Knocked Out';
       } else {
-        el.textContent = fmt(val);
+        el.textContent = fmtCompact(val);
       }
     }
   }
@@ -2730,12 +2737,12 @@ function awardPot(winnings, potResults) {
     potResults.forEach((pot, idx) => {
       const label = idx === 0 ? 'the main pot' : 'a side pot';
       Object.keys(pot.winners).forEach(pid => {
-        logEvent(getPlayerName(pid) + ' won ' + fmt(pot.winners[pid]) + ' ' + gpIconHtml() + ' from ' + label + '!');
+        logEvent(getPlayerName(pid) + ' won ' + fmtCompact(pot.winners[pid]) + ' ' + gpIconHtml() + ' from ' + label + '!');
       });
     });
   } else {
     winnerPids.forEach(pid => {
-      logEvent(getPlayerName(pid) + ' won ' + fmt(winnings[pid]) + ' ' + gpIconHtml() + '!');
+      logEvent(getPlayerName(pid) + ' won ' + fmtCompact(winnings[pid]) + ' ' + gpIconHtml() + '!');
     });
   }
 
@@ -2839,8 +2846,8 @@ function awardPot(winnings, potResults) {
             _playerChips = rebuyAmount;
             playBuyInSound();
             saveBankroll();
-            logEvent('You rebought for ' + fmt(rebuyAmount) + ' ' + gpIconHtml() + '.');
-            document.getElementById('chips-player').textContent = fmt(_playerChips);
+            logEvent('You rebought for ' + fmtCompact(rebuyAmount) + ' ' + gpIconHtml() + '.');
+            document.getElementById('chips-player').textContent = fmtCompact(_playerChips);
             document.getElementById('message-overlay').style.display = 'none';
             btn.onclick = nextHand;
             btn2.style.display = 'none';
@@ -2973,17 +2980,17 @@ function renderChips() {
       const stillInHand = inHand && state.activePids.includes(p.id);
       el.textContent = stillInHand ? 'All In' : 'Knocked Out';
     } else {
-      el.textContent = fmt(p.chips);
+      el.textContent = fmtCompact(p.chips);
     }
   }
   const pel = document.getElementById('chips-player');
   if (pel) {
-    pel.textContent = (inHand && _playerChips === 0) ? 'All In' : fmt(_playerChips);
+    pel.textContent = (inHand && _playerChips === 0) ? 'All In' : fmtCompact(_playerChips);
   }
 }
 
 function renderPot() {
-  document.getElementById('pot-label').textContent = fmt(state.pot || 0);
+  document.getElementById('pot-label').textContent = fmtCompact(state.pot || 0);
   const icon = document.getElementById('pot-icon');
   if (icon) {
     const src = potPileImage(state.pot || 0);
@@ -3604,7 +3611,7 @@ function showLobby() {
       if (bankroll < t.min) {
         row.classList.add('cant-afford');
         badge.className = 'lobby-table-badge badge-broke';
-        badge.textContent = 'Need ' + fmt(t.min);
+        badge.textContent = 'Need ' + fmtCompact(t.min);
       } else {
         badge.className = 'lobby-table-badge badge-play';
         badge.textContent = 'Sit Down';
@@ -3632,8 +3639,8 @@ function sitDown(tableIdx) {
   input.max    = maxAfford;
   input.step   = t.min;
   input.value  = maxAfford;
-  document.getElementById('buyin-min-label').textContent = 'Min: ' + fmt(t.min);
-  document.getElementById('buyin-max-label').textContent = 'Max: ' + fmt(maxAfford);
+  document.getElementById('buyin-min-label').textContent = 'Min: ' + fmtCompact(t.min);
+  document.getElementById('buyin-max-label').textContent = 'Max: ' + fmtCompact(maxAfford);
   document.getElementById('buyin-title').textContent = t.name + ' Table';
   document.getElementById('buyin-bankroll-note').textContent = 'Your bankroll: ' + fmt(bankroll) + ' GP';
   document.getElementById('buyin-dialog').style.display = 'flex';
@@ -3679,7 +3686,7 @@ function confirmBuyin() {
   playBuyInSound();
   saveBankroll();
   resetGameLog();
-  logEvent('You bought in for ' + fmt(amount) + ' ' + gpIconHtml() + '.');
+  logEvent('You bought in for ' + fmtCompact(amount) + ' ' + gpIconHtml() + '.');
 
   // Configure table stakes
   state.minBet = t.bb;
@@ -3699,10 +3706,10 @@ function confirmBuyin() {
 
   // Set player chips and start
   _playerChips = tableBuyIn;
-  document.getElementById('chips-player').textContent = fmt(tableBuyIn);
+  document.getElementById('chips-player').textContent = fmtCompact(tableBuyIn);
   for (let p of PLAYERS) {
     const el = document.getElementById('chips-' + p.id);
-    if (el) el.textContent = fmt(p.chips);
+    if (el) el.textContent = fmtCompact(p.chips);
   }
 
   state.dealerIdx = 0;
@@ -3815,7 +3822,7 @@ function mpShowRebuyPrompt(s) {
       mpBuyIn += rebuyAmount; // count toward session net, not just the original buy-in
       playBuyInSound();
       saveBankroll();
-      logEvent('You rebought for ' + fmt(rebuyAmount) + ' ' + gpIconHtml() + '.');
+      logEvent('You rebought for ' + fmtCompact(rebuyAmount) + ' ' + gpIconHtml() + '.');
       document.getElementById('message-overlay').style.display = 'none';
       btn2.style.display = 'none';
       try {
@@ -3850,7 +3857,7 @@ async function mpFinishCashOut(s) {
   _mpCashOutInProgress = true;
   const myChips = parseInt((s.chips && s.chips[mpMyUid]) || 0) || 0;
   if (myChips > 0) playCashOutSound();
-  if (myChips > 0) logEvent('You cashed out with ' + fmt(myChips) + ' ' + gpIconHtml() + '.');
+  if (myChips > 0) logEvent('You cashed out with ' + fmtCompact(myChips) + ' ' + gpIconHtml() + '.');
   recordResult(myChips - mpBuyIn);
   bankroll += myChips;
   saveBankroll();
@@ -3887,7 +3894,7 @@ function leaveTable() {
   const net = _playerChips - tableBuyIn;
   recordResult(net);
   if (_playerChips > 0) playCashOutSound();
-  if (_playerChips > 0) logEvent('You cashed out with ' + fmt(_playerChips) + ' ' + gpIconHtml() + '.');
+  if (_playerChips > 0) logEvent('You cashed out with ' + fmtCompact(_playerChips) + ' ' + gpIconHtml() + '.');
   bankroll += _playerChips;
   _playerChips = 0;
   saveBankroll();
@@ -4141,7 +4148,7 @@ function renderCtTierOptions() {
     const opt = document.createElement('div');
     opt.className = 'ct-tier-option' + (canAfford ? '' : ' disabled');
     opt.innerHTML = t.icon + `<div>${t.name}</div>` +
-      `<div class="ct-tier-detail">${fmt(t.min)}–${fmt(t.max)} GP</div>` +
+      `<div class="ct-tier-detail">${fmtCompact(t.min)}–${fmtCompact(t.max)} GP</div>` +
       `<div class="ct-tier-detail">Blinds ${fmt(t.sb)}/${fmt(t.bb)}</div>`;
     if (canAfford) opt.onclick = () => selectCtTier(i);
     container.appendChild(opt);
@@ -4249,7 +4256,7 @@ async function createTable() {
 
   closeCreateTable();
   enterWaitingRoom(tableId, true);
-  logEvent('You bought in for ' + fmt(buyIn) + ' ' + gpIconHtml() + '.');
+  logEvent('You bought in for ' + fmtCompact(buyIn) + ' ' + gpIconHtml() + '.');
   } finally {
     _mpJoinOrCreateInFlight = false;
     if (createBtn) createBtn.disabled = false;
@@ -4334,7 +4341,7 @@ async function joinTable(tableId) {
 
   closeJoinCode();
   enterWaitingRoom(tableId, false);
-  logEvent('You bought in for ' + fmt(buyIn) + ' ' + gpIconHtml() + '.');
+  logEvent('You bought in for ' + fmtCompact(buyIn) + ' ' + gpIconHtml() + '.');
   } finally {
     _mpJoinOrCreateInFlight = false;
   }
@@ -4366,7 +4373,7 @@ function listenPublicTables() {
           <div class="mp-table-tier">${tier.icon}</div>
           <div class="mp-table-info">
             <div class="mp-table-host">${t.hostName}'s Table</div>
-            <div class="mp-table-details">${tier.name} · Buy-in: ${fmt(tier.min)}–${fmt(tier.max)} GP · Blinds: ${fmt(tier.sb)}/${fmt(tier.bb)}</div>
+            <div class="mp-table-details">${tier.name} · Buy-in: ${fmtCompact(tier.min)}–${fmtCompact(tier.max)} GP · Blinds: ${fmt(tier.sb)}/${fmt(tier.bb)}</div>
           </div>
           <div class="mp-table-players">${t.playerCount || 0}/${t.maxPlayers}</div>
         `;
@@ -4679,7 +4686,7 @@ function setupMPSeats(players, cfg) {
         ? `<img src="${p.photo}" style="width:100%;height:100%;border-radius:50%;object-fit:cover;">`
         : '🧑';
       document.querySelector('#seat-player .seat-name').textContent = 'You';
-      document.getElementById('chips-player').textContent = fmt(parseInt(p.chips) || 0);
+      document.getElementById('chips-player').textContent = fmtCompact(parseInt(p.chips) || 0);
       _playerChips = parseInt(p.chips) || 0;
     } else {
       seatEl.querySelector('.avatar-frame').innerHTML = p.photo
@@ -4687,7 +4694,7 @@ function setupMPSeats(players, cfg) {
         : '🧑';
       seatEl.querySelector('.seat-name').textContent = p.name || 'Player';
       const chipSpan = seatEl.querySelector('.seat-chips span:not(.chip-spacer)');
-      if (chipSpan) chipSpan.textContent = fmt(parseInt(p.chips) || 0);
+      if (chipSpan) chipSpan.textContent = fmtCompact(parseInt(p.chips) || 0);
     }
   });
 }
@@ -4806,7 +4813,7 @@ function renderMPState(s, players) {
       const sp = el.querySelector('.seat-chips span:not(.chip-spacer)');
       const chipVal = parseInt(s.chips[uid]) || 0;
       const isAllin = !!(s.allin && s.allin[uid]) && !(s.folded && s.folded[uid]);
-      if (sp) sp.textContent = (isAllin && chipVal === 0) ? 'All In' : fmt(chipVal);
+      if (sp) sp.textContent = (isAllin && chipVal === 0) ? 'All In' : fmtCompact(chipVal);
     }
     if (s.folded && s.folded[uid]) el.classList.add('folded');
     else el.classList.remove('folded');
@@ -4847,7 +4854,7 @@ function renderMPState(s, players) {
   if (s.chips && s.chips[mpMyUid] !== undefined) {
     _playerChips = s.chips[mpMyUid];
     const myAllin = !!(s.allin && s.allin[mpMyUid]) && !(s.folded && s.folded[mpMyUid]);
-    document.getElementById('chips-player').textContent = (myAllin && _playerChips === 0) ? 'All In' : fmt(_playerChips);
+    document.getElementById('chips-player').textContent = (myAllin && _playerChips === 0) ? 'All In' : fmtCompact(_playerChips);
   }
 
   // Blinds are posted directly when a hand is dealt (never go through
@@ -4961,7 +4968,7 @@ function renderMPState(s, players) {
   _mpPrevCommunityLen = community.length;
 
   // Pot
-  document.getElementById('pot-label').textContent = fmt(s.pot || 0);
+  document.getElementById('pot-label').textContent = fmtCompact(s.pot || 0);
   const potIconEl = document.getElementById('pot-icon');
   if (potIconEl) {
     const src = potPileImage(s.pot || 0);
@@ -5346,13 +5353,13 @@ function mpHandEnded(s, players) {
         const label = idx === 0 ? 'the main pot' : 'a side pot';
         Object.keys(pot.winners).forEach(uid => {
           const pname = (players[uid] && players[uid].publicInfo && players[uid].publicInfo.name) || 'Player';
-          logEvent(pname + ' won ' + fmt(pot.winners[uid]) + ' ' + gpIconHtml() + ' from ' + label + '!');
+          logEvent(pname + ' won ' + fmtCompact(pot.winners[uid]) + ' ' + gpIconHtml() + ' from ' + label + '!');
         });
       });
     } else {
       winnerUids.forEach(uid => {
         const pname = (players[uid] && players[uid].publicInfo && players[uid].publicInfo.name) || 'Player';
-        logEvent(pname + ' won ' + fmt(winnings[uid]) + ' ' + gpIconHtml() + '!');
+        logEvent(pname + ' won ' + fmtCompact(winnings[uid]) + ' ' + gpIconHtml() + '!');
       });
     }
 
