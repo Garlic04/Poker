@@ -2139,6 +2139,7 @@ function initHand() {
     lastRaiseSize: state.minBet || 200,
     playerTurn: null,
     acting: false,
+    raisesThisRound: 0, // resets each street; tracks how many raises deep the current betting round is
   };
 
   // Initialize bets
@@ -2290,6 +2291,19 @@ function nextAction() {
   const remaining = state.activePids.filter(p => !state.folded.has(p));
   if (remaining.length === 1) { awardPot({ [remaining[0]]: state.pot }, null); return; }
 
+  // If at most one remaining player isn't already all-in, there's no more
+  // betting to be had — everyone else can't respond either way. Only
+  // exception: that lone player still has an outstanding bet to respond to
+  // (fold vs call is still a real decision); otherwise just run the hand
+  // out instead of asking for input that can't change anything.
+  const canStillAct = remaining.filter(p => !state.allin.has(p));
+  if (canStillAct.length <= 1) {
+    const stillOwed = canStillAct.length === 1
+      ? Math.max(0, state.highBet - (state.bets[canStillAct[0]] || 0))
+      : 0;
+    if (stillOwed <= 0) { state.toAct = []; advancePhase(); return; }
+  }
+
   // Queue empty → street is over
   if (state.toAct.length === 0) { advancePhase(); return; }
 
@@ -2311,6 +2325,7 @@ function nextAction() {
 
 function advancePhase() {
   clearHighlight();
+  state.raisesThisRound = 0;
   if (state.phase === 'preflop') {
     state.phase = 'flop';
     state.community.push(state.deck.pop(), state.deck.pop(), state.deck.pop());
@@ -2382,6 +2397,7 @@ function spPlayerAction(action) {
     const isAllin = getChips(PLAYER_ID) === 0;
     if (isAllin) state.allin.add(PLAYER_ID);
     state.highBet = Math.max(state.highBet, state.bets[PLAYER_ID] || 0);
+    if (toCall > 0) state.raisesThisRound = (state.raisesThisRound || 0) + 1;
     onBetOrRaise(PLAYER_ID, betAmt);
     wasBetOrRaise = true;
     showActionBubble('seat-player', (toCall > 0 ? 'Raise ' : 'Bet ') + fmt(betAmt));
@@ -2482,9 +2498,22 @@ function aiAction(pid) {
   } else {
     // Must call, raise, or fold
     const callEV = strength - potOdds;
-    // Raise frequency ramps up from around two pair, same reasoning as the
-    // bet threshold above.
-    const raiseChance = Math.max(0, Math.min(0.8, (strength - 0.55) / 0.35));
+    const escalation = state.raisesThisRound || 0;
+    // Each additional raise this street demands meaningfully more hand
+    // strength to keep contesting — a good-but-not-great hand like a flush
+    // shouldn't keep re-raising into repeated resistance just because pot
+    // odds are technically fine; real players recognize escalating
+    // aggression as a signal and back off rather than shoving every strong
+    // (but not top-of-range) hand to the felt.
+    const raiseBar = 0.55 + escalation * 0.12;
+    const raiseChance = Math.max(0, Math.min(0.8, (strength - raiseBar) / 0.35));
+    // Calling also gets stricter as the round escalates — style-driven
+    // "call anyway" looseness only applies for the first raise or two,
+    // after that everyone falls back to real hand strength vs. pot odds.
+    const minCallStrength = 0.12 + escalation * 0.09;
+    const styleCallsAnyway = escalation < 2 && (
+      (style === 'loose' && r < 0.35 * factor) || (style === 'aggressive' && r < 0.3 * factor)
+    );
     if (r < raiseChance) {
       // Raise — same table-scaled sizing as the initial bet above, instead
       // of a hardcoded 200 minimum that's trivial at high stakes and huge
@@ -2497,13 +2526,14 @@ function aiAction(pid) {
       if (getChips(pid) === 0) state.allin.add(pid);
       if (newHighBet > state.highBet) {
         state.highBet = newHighBet;
+        state.raisesThisRound = escalation + 1;
         onBetOrRaise(pid, raiseExtra);
         wasBetOrRaise = true;
       } else {
         state.highBet = Math.max(state.highBet, newHighBet);
       }
       showActionBubble(seatId, getChips(pid) === 0 ? 'All-In!' : 'Raise');
-    } else if (callEV > -0.03 * factor || (style === 'loose' && r < 0.35 * factor) || (style === 'aggressive' && r < 0.3 * factor)) {
+    } else if (strength > minCallStrength && (callEV > -0.03 * factor || styleCallsAnyway)) {
       // Call
       const amount = Math.min(toCall, myChips);
       placeBet(pid, amount);
@@ -2538,7 +2568,21 @@ function estimateHandStrength(hand, community, pid) {
     let s = (high / 14) * 0.5 + (paired ? 0.3 : 0) + (suited ? 0.05 : 0);
     return Math.min(0.95, s);
   }
-  return evaluateSimple(all);
+  let strength = evaluateSimple(all);
+  // Recognize an overpair (a pocket pair higher than every community card).
+  // The aggregate hand-category score alone can't tell "pair of Aces" apart
+  // from "pair of twos" — both just read as the flat "pair" tier — which
+  // made big preflop pairs go strangely passive the instant the board
+  // didn't directly improve them, even though an overpair is very likely
+  // still the best hand at the table.
+  const r1 = RANK_VAL[hand[0].rank], r2 = RANK_VAL[hand[1].rank];
+  if (r1 === r2) {
+    const maxBoard = Math.max(...community.map(c => RANK_VAL[c.rank]));
+    if (r1 > maxBoard) {
+      strength = Math.max(strength, 0.55 + (r1 / 14) * 0.15);
+    }
+  }
+  return strength;
 }
 
 function evaluateSimple(cards) {
