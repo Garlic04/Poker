@@ -1774,8 +1774,8 @@ function tableCardIcon(color, glow, textColor) {
 const PLAYERS = [
   { id:0, name:'Slasher Steve', emoji:'🏴‍☠️', chips:8300, style:'aggressive' },
   { id:1, name:'Gorgon',        emoji:'👹',   chips:51600, style:'tight' },
-  { id:2, name:'Ezekiel',       emoji:'🐉',   chips:34306, style:'loose' },
-  { id:3, name:'Laffite',       emoji:'👻',   chips:26100, style:'aggressive' },
+  { id:2, name:'Ezekiel',       emoji:'🐉',   chips:34306, style:'tight' },
+  { id:3, name:'Laffite',       emoji:'👻',   chips:26100, style:'tight' },
   { id:4, name:'Wizzo',         emoji:'🦜',   chips:20000, style:'loose' },
 ];
 
@@ -2100,6 +2100,8 @@ let state = {};
 let _nextActionTimer = null;
 
 function initHand() {
+  _aiMoodClock++; // advances each hand — drives each AI's slow personality "mood wave"
+
   // Build deck
   let deck = [];
   for (let s of SUITS) for (let r of RANKS) deck.push({rank:r, suit:s});
@@ -2406,6 +2408,31 @@ function placeBet(pid, amount) {
 // ============================================================
 // AI LOGIC
 // ============================================================
+// Smooth 0..1 ramp so an AI's personality (bluffing, loose-calling) fades
+// out gradually as their stack gets short, instead of flipping abruptly at
+// a fixed threshold. Full personality at 15+ big blinds, tapering linearly
+// down to none by ~4 big blinds — a player that short should be playing
+// straight equity, not still spec-calling or bluffing off their last chips.
+// This recalculates fresh from their *current* stack every time, so it
+// naturally recovers too — an AI who rebuilds their stack after a rough
+// patch gets their personality back, it's not a one-way decay.
+let _aiMoodClock = 0;
+function styleFactor(pid) {
+  const bb = state.minBet || 200;
+  const stackBB = getChips(pid) / bb;
+  const stackFactor = Math.max(0, Math.min(1, (stackBB - 4) / 11));
+  // On top of the stack constraint, each AI's aggression/looseness also
+  // ebbs and flows over the course of a session — a slow wave, offset
+  // differently per player so they're never all in sync, so a
+  // comfortably-stacked player still varies hand to hand instead of always
+  // playing at identical intensity. A short stack stays disciplined
+  // regardless of where their mood currently sits (stackFactor multiplies
+  // it, so mood alone can never override being genuinely short).
+  const phase = pid * 1.7;
+  const mood = 0.5 + 0.5 * Math.sin(_aiMoodClock * 0.35 + phase);
+  return stackFactor * mood;
+}
+
 function aiAction(pid) {
   const player = PLAYERS[pid];
   const toCall = Math.max(0, state.highBet - (state.bets[pid]||0));
@@ -2417,17 +2444,28 @@ function aiAction(pid) {
   const potOdds = toCall > 0 ? toCall / (state.pot + toCall) : 0;
   const seatId = 'seat-' + pid;
   const r = Math.random();
+  const factor = styleFactor(pid);
   let wasBetOrRaise = false;
 
   if (toCall === 0) {
     // Can check or bet
-    if (strength > 0.7 || (style === 'aggressive' && r < 0.5)) {
-      const betAmt = Math.min(Math.floor(state.pot * (0.3 + Math.random()*0.4) / 100)*100 || 200, myChips);
+    if (strength > 0.7 || (style === 'aggressive' && r < 0.35 * factor)) {
+      // Size the bet as a fraction of the pot, scaled to a round multiple of
+      // the table's own big blind — a flat 100-GP rounding step (and a
+      // hardcoded 200 fallback) meant this always rounded down to 0 for
+      // typical pot sizes, which silently fell back to a flat "200" every
+      // single time (0 is falsy) regardless of stakes or hand strength.
+      // That 200 was trivial at a high-stakes table and an instant all-in
+      // at a low-stakes one.
+      const bb = state.minBet || 200;
+      const rawBet = state.pot * (0.25 + Math.random() * 0.35);
+      const betAmt = Math.min(Math.max(bb, Math.round(rawBet / bb) * bb), myChips);
       placeBet(pid, betAmt);
       state.highBet = Math.max(state.highBet, state.bets[pid]);
+      if (getChips(pid) === 0) state.allin.add(pid);
       onBetOrRaise(pid, betAmt);
       wasBetOrRaise = true;
-      showActionBubble(seatId, 'Bet ' + fmt(betAmt));
+      showActionBubble(seatId, getChips(pid) === 0 ? 'All-In!' : 'Bet ' + fmt(betAmt));
     } else {
       showActionBubble(seatId, 'Check');
       playCheckSound();
@@ -2436,8 +2474,11 @@ function aiAction(pid) {
     // Must call, raise, or fold
     const callEV = strength - potOdds;
     if (strength > 0.75 && r < 0.6) {
-      // Raise
-      const raiseExtra = Math.max(200, Math.floor(state.pot * 0.5 / 100) * 100);
+      // Raise — same table-scaled sizing as the initial bet above, instead
+      // of a hardcoded 200 minimum that's trivial at high stakes and huge
+      // at low stakes.
+      const bb = state.minBet || 200;
+      const raiseExtra = Math.max(bb, Math.round(state.pot * 0.45 / bb) * bb);
       const amount = Math.min(toCall + raiseExtra, myChips);
       placeBet(pid, amount);
       const newHighBet = state.bets[pid];
@@ -2450,7 +2491,7 @@ function aiAction(pid) {
         state.highBet = Math.max(state.highBet, newHighBet);
       }
       showActionBubble(seatId, getChips(pid) === 0 ? 'All-In!' : 'Raise');
-    } else if (callEV > -0.1 || (style === 'loose' && r < 0.5) || (style === 'aggressive' && r < 0.4)) {
+    } else if (callEV > -0.1 * factor || (style === 'loose' && r < 0.35 * factor) || (style === 'aggressive' && r < 0.3 * factor)) {
       // Call
       const amount = Math.min(toCall, myChips);
       placeBet(pid, amount);
