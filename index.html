@@ -1128,6 +1128,8 @@
     background: rgba(0,0,0,0.3);
   }
   .ct-tier-option svg { width: 22px; height: 30px; }
+  .ct-tier-detail { font-size: 8px; color: #999; line-height: 1.3; }
+  .ct-tier-option.selected .ct-tier-detail { color: #d8c07a; }
   .ct-tier-option.selected { color: #f4e84a; border-color: #8B5E1A; background: rgba(139,94,26,0.2); }
   .ct-tier-option.disabled { opacity: 0.35; cursor: not-allowed; }
   #ct-btn-row { display: flex; gap: 8px; }
@@ -1360,7 +1362,7 @@
     <!-- Singleplayer tables (shown in solo mode) -->
     <div id="lobby-tables">
       <div class="lobby-table" id="ltable-0" onclick="sitDown(0)">
-        <div class="lobby-table-icon"><svg width="32" height="44" viewBox="0 0 32 44" xmlns="http://www.w3.org/2000/svg"><rect x="1" y="1" width="30" height="42" rx="4" ry="4" fill="#f0f0f0" stroke="#cd7f32" stroke-width="2"/><text x="16" y="20" font-size="14" font-family="Georgia,serif" font-weight="bold" fill="#cd7f32" text-anchor="middle">A</text><text x="16" y="35" font-size="17" font-family="Georgia,serif" fill="#cd7f32" text-anchor="middle">♠</text></svg></div>
+        <div class="lobby-table-icon"><svg width="32" height="44" viewBox="0 0 32 44" xmlns="http://www.w3.org/2000/svg"><rect x="1" y="1" width="30" height="42" rx="4" ry="4" fill="#1a1a1a" stroke="#cd7f32" stroke-width="2"/><text x="16" y="20" font-size="14" font-family="Georgia,serif" font-weight="bold" fill="#cd7f32" text-anchor="middle">A</text><text x="16" y="35" font-size="17" font-family="Georgia,serif" fill="#cd7f32" text-anchor="middle">♠</text></svg></div>
         <div class="lobby-table-info">
           <div class="lobby-table-name">Bronze Table</div>
           <div class="lobby-table-buyin">Buy-in: 20 – 200 GP</div>
@@ -1369,7 +1371,7 @@
         <div class="lobby-table-badge" id="ltbadge-0">Play</div>
       </div>
       <div class="lobby-table" id="ltable-1" onclick="sitDown(1)">
-        <div class="lobby-table-icon"><svg width="32" height="44" viewBox="0 0 32 44" xmlns="http://www.w3.org/2000/svg"><rect x="1" y="1" width="30" height="42" rx="4" ry="4" fill="#f0f0f0" stroke="#c0c0c0" stroke-width="2"/><text x="16" y="20" font-size="14" font-family="Georgia,serif" font-weight="bold" fill="#8a8a8a" text-anchor="middle">A</text><text x="16" y="35" font-size="17" font-family="Georgia,serif" fill="#8a8a8a" text-anchor="middle">♠</text></svg></div>
+        <div class="lobby-table-icon"><svg width="32" height="44" viewBox="0 0 32 44" xmlns="http://www.w3.org/2000/svg"><rect x="1" y="1" width="30" height="42" rx="4" ry="4" fill="#1a1a1a" stroke="#c0c0c0" stroke-width="2"/><text x="16" y="20" font-size="14" font-family="Georgia,serif" font-weight="bold" fill="#c0c0c0" text-anchor="middle">A</text><text x="16" y="35" font-size="17" font-family="Georgia,serif" fill="#c0c0c0" text-anchor="middle">♠</text></svg></div>
         <div class="lobby-table-info">
           <div class="lobby-table-name">Silver Table</div>
           <div class="lobby-table-buyin">Buy-in: 200 – 2,000 GP</div>
@@ -1378,7 +1380,7 @@
         <div class="lobby-table-badge" id="ltbadge-1">Play</div>
       </div>
       <div class="lobby-table" id="ltable-2" onclick="sitDown(2)">
-        <div class="lobby-table-icon"><svg width="32" height="44" viewBox="0 0 32 44" xmlns="http://www.w3.org/2000/svg" style="filter: drop-shadow(0 0 4px #ffd70088);"><rect x="1" y="1" width="30" height="42" rx="4" ry="4" fill="#f0f0f0" stroke="#ffd700" stroke-width="2"/><text x="16" y="20" font-size="14" font-family="Georgia,serif" font-weight="bold" fill="#ffd700" text-anchor="middle">A</text><text x="16" y="35" font-size="17" font-family="Georgia,serif" fill="#ffd700" text-anchor="middle">♠</text></svg></div>
+        <div class="lobby-table-icon"><svg width="32" height="44" viewBox="0 0 32 44" xmlns="http://www.w3.org/2000/svg" style="filter: drop-shadow(0 0 4px #ffd70088);"><rect x="1" y="1" width="30" height="42" rx="4" ry="4" fill="#1a1a1a" stroke="#ffd700" stroke-width="2"/><text x="16" y="20" font-size="14" font-family="Georgia,serif" font-weight="bold" fill="#ffd700" text-anchor="middle">A</text><text x="16" y="35" font-size="17" font-family="Georgia,serif" fill="#ffd700" text-anchor="middle">♠</text></svg></div>
         <div class="lobby-table-info">
           <div class="lobby-table-name">Gold Table</div>
           <div class="lobby-table-buyin">Buy-in: 2,000 – 20,000 GP</div>
@@ -1387,7 +1389,7 @@
         <div class="lobby-table-badge" id="ltbadge-2">Play</div>
       </div>
       <div class="lobby-table" id="ltable-3" onclick="sitDown(3)">
-        <div class="lobby-table-icon"><svg width="32" height="44" viewBox="0 0 32 44" xmlns="http://www.w3.org/2000/svg" style="filter: drop-shadow(0 0 4px #b9f2ff88);"><rect x="1" y="1" width="30" height="42" rx="4" ry="4" fill="#f0f0f0" stroke="#b9f2ff" stroke-width="2"/><text x="16" y="20" font-size="14" font-family="Georgia,serif" font-weight="bold" fill="#2f9fc4" text-anchor="middle">A</text><text x="16" y="35" font-size="17" font-family="Georgia,serif" fill="#2f9fc4" text-anchor="middle">♠</text></svg></div>
+        <div class="lobby-table-icon"><svg width="32" height="44" viewBox="0 0 32 44" xmlns="http://www.w3.org/2000/svg" style="filter: drop-shadow(0 0 4px #b9f2ff88);"><rect x="1" y="1" width="30" height="42" rx="4" ry="4" fill="#1a1a1a" stroke="#b9f2ff" stroke-width="2"/><text x="16" y="20" font-size="14" font-family="Georgia,serif" font-weight="bold" fill="#b9f2ff" text-anchor="middle">A</text><text x="16" y="35" font-size="17" font-family="Georgia,serif" fill="#b9f2ff" text-anchor="middle">♠</text></svg></div>
         <div class="lobby-table-info">
           <div class="lobby-table-name">Diamond Table</div>
           <div class="lobby-table-buyin">Buy-in: 20,000 – 200,000 GP</div>
@@ -1638,7 +1640,7 @@ function tableCardIcon(color, glow, textColor) {
   const glowStyle = glow ? ` style="filter: drop-shadow(0 0 4px ${color}88);"` : '';
   const tc = textColor || color;
   return `<svg width="32" height="44" viewBox="0 0 32 44" xmlns="http://www.w3.org/2000/svg"${glowStyle}>` +
-    `<rect x="1" y="1" width="30" height="42" rx="4" ry="4" fill="#f0f0f0" stroke="${color}" stroke-width="2"/>` +
+    `<rect x="1" y="1" width="30" height="42" rx="4" ry="4" fill="#1a1a1a" stroke="${color}" stroke-width="2"/>` +
     `<text x="16" y="20" font-size="14" font-family="Georgia,serif" font-weight="bold" fill="${tc}" text-anchor="middle">A</text>` +
     `<text x="16" y="35" font-size="17" font-family="Georgia,serif" fill="${tc}" text-anchor="middle">♠</text>` +
     `</svg>`;
@@ -2929,9 +2931,10 @@ function renderProfile() {
 // ACHIEVEMENT CHECKS
 // ============================================================
 
-function checkAchievements(context) {
+function checkAchievements(context, playerIdentifier) {
   const { winners, pot, playerWentAllin, everyoneFolded, tableIdx } = context;
-  const playerWon = winners && winners.includes(PLAYER_ID);
+  const myId = playerIdentifier !== undefined ? playerIdentifier : PLAYER_ID;
+  const playerWon = winners && winners.includes(myId);
   if (!stats.achievements) stats.achievements = {};
   if (!stats.handsPlayed) stats.handsPlayed = 0;
   stats.handsPlayed++;
@@ -2980,9 +2983,9 @@ function checkKnockoutAchievements() {
 
 const TABLES = [
   { name:'Bronze',      sb:1,    bb:2,    min:20,    max:200,    icon:tableCardIcon('#cd7f32', false) },
-  { name:'Silver',      sb:10,   bb:20,   min:200,   max:2000,   icon:tableCardIcon('#c0c0c0', false, '#8a8a8a') },
+  { name:'Silver',      sb:10,   bb:20,   min:200,   max:2000,   icon:tableCardIcon('#c0c0c0', false) },
   { name:'Gold',        sb:100,  bb:200,  min:2000,  max:20000,  icon:tableCardIcon('#ffd700', true)  },
-  { name:'Diamond',     sb:1000, bb:2000, min:20000, max:200000, icon:tableCardIcon('#b9f2ff', true, '#2f9fc4') },
+  { name:'Diamond',     sb:1000, bb:2000, min:20000, max:200000, icon:tableCardIcon('#b9f2ff', true)  },
 ];
 
 let currentTable = null; // index into TABLES
@@ -3314,6 +3317,7 @@ async function mpFinishCashOut(s) {
   _mpCashOutInProgress = true;
   const myChips = parseInt((s.chips && s.chips[mpMyUid]) || 0) || 0;
   if (myChips > 0) playCashOutSound();
+  recordResult(myChips - mpBuyIn);
   bankroll += myChips;
   saveBankroll();
   try {
@@ -3484,6 +3488,8 @@ if (auth) { auth.onAuthStateChanged(async user => {
 
 let mpMode = 'solo'; // 'solo' | 'multi'
 let mpTableId = null;
+let mpBuyIn = 0;    // chips bought into the current MP table (for session profit/loss)
+let mpTierIdx = null; // current MP table's stake tier (for the High Roller achievement)
 let _mpPendingCashOut = false;
 let _mpCashOutInProgress = false;
 let mpTableRef = null;
@@ -3543,7 +3549,9 @@ function renderCtTierOptions() {
     if (canAfford && firstAffordable === -1) firstAffordable = i;
     const opt = document.createElement('div');
     opt.className = 'ct-tier-option' + (canAfford ? '' : ' disabled');
-    opt.innerHTML = t.icon + `<div>${t.name}</div>`;
+    opt.innerHTML = t.icon + `<div>${t.name}</div>` +
+      `<div class="ct-tier-detail">${fmt(t.min)}–${fmt(t.max)} GP</div>` +
+      `<div class="ct-tier-detail">Blinds ${fmt(t.sb)}/${fmt(t.bb)}</div>`;
     if (canAfford) opt.onclick = () => selectCtTier(i);
     container.appendChild(opt);
   });
@@ -3613,6 +3621,8 @@ async function createTable() {
 
   // Deduct buy-in from bankroll
   const buyIn = Math.min(bankroll, t.max);
+  mpBuyIn = buyIn;
+  mpTierIdx = tierIdx;
   bankroll -= buyIn;
   playBuyInSound();
   saveBankroll();
@@ -3689,6 +3699,8 @@ async function joinTable(tableId) {
     document.getElementById('join-code-status').textContent = 'Not enough GP for this table.';
     return;
   }
+  mpBuyIn = buyIn;
+  mpTierIdx = data.config.tierIdx;
   bankroll -= buyIn;
   playBuyInSound();
   saveBankroll();
@@ -3885,6 +3897,7 @@ let mpDisconnectRef = null;
 let _mpPrevBets = {};           // for detecting bet->pot coin animations
 let _mpPrevPhase = null;
 let _mpWinnerAnimatedForHand = null; // hand number we've already animated pot->winner for
+let _mpStatsCheckedForHand = null;   // hand number we've already updated stats/achievements for
 let _mpPrevHandNum = null;      // hand number we've already dealt opponent card-backs for
 let _mpPrevCommunityLen = 0;    // how many community cards were showing last render
 let _mpPrevFolded = {};         // for detecting new folds (played for every connected client)
@@ -3905,11 +3918,13 @@ function startMPGame(tableData) {
   mpMyUid = currentUser.uid;
   _mpHandEndedCalled = false;
   _mpDealingHand = false;
+  _mpProcessingAction = false;
   _mpPendingCashOut = false;
   _mpCashOutInProgress = false;
   _mpPrevBets = {};
   _mpPrevPhase = null;
   _mpWinnerAnimatedForHand = null;
+  _mpStatsCheckedForHand = null;
   _mpPrevHandNum = null;
   _mpPrevCommunityLen = 0;
   _mpPrevFolded = {};
@@ -4207,6 +4222,22 @@ function renderMPState(s, players) {
     if (winnerSeatId) animatePotToWinner(winnerSeatId, s.wonAmount || 0, () => {});
   }
 
+  // Stats + achievements — singleplayer already does this per-hand via
+  // checkAchievements(); multiplayer never called any of it, so none of a
+  // player's progress was tracked there at all. Each client updates its own
+  // local stats here (once per hand) the same way renderMPState already
+  // handles everything else per-client.
+  if (s.phase === 'between_hands' && s.winner && s.hand !== _mpStatsCheckedForHand) {
+    _mpStatsCheckedForHand = s.hand;
+    const playerWon = s.winner === mpMyUid;
+    const playerWentAllin = !!(s.allin && s.allin[mpMyUid]);
+    checkAchievements({
+      winners: [s.winner], pot: s.wonAmount || 0,
+      playerWentAllin, everyoneFolded: !!s.wonByFold,
+      tableIdx: mpTierIdx,
+    }, mpMyUid);
+  }
+
   // Deal opponent card-backs with a staggered "dealing" animation, once per
   // hand. Opponent seats never showed card-backs at all before this — only
   // community cards and your own hole cards were being rendered.
@@ -4375,8 +4406,26 @@ function playerAction(action) {
 }
 
 // ── Host processes incoming actions
+let _mpProcessingAction = false;
 async function mpProcessAction(actionData) {
   if (!mpIsHost || !mpState) return;
+  if (_mpProcessingAction) {
+    // Another action is still mid-flight (e.g. an all-in hand cascading
+    // through multiple streets). Processing this one now would read stale
+    // mpState and could double-apply an action or re-run a phase advance —
+    // defer it slightly and let the in-flight one finish first.
+    setTimeout(() => mpProcessAction(actionData), 120);
+    return;
+  }
+  _mpProcessingAction = true;
+  try {
+    await mpProcessActionInner(actionData);
+  } finally {
+    _mpProcessingAction = false;
+  }
+}
+
+async function mpProcessActionInner(actionData) {
   const { uid, action, amount } = actionData;
 
   // Convert Firebase objects to arrays
@@ -4561,7 +4610,7 @@ function mpHandEnded(s, players) {
 
     // Write winner state
     await rtdb.ref(`tables/${mpTableId}/state`).update({
-      chips: newChips, pot: 0, phase: 'between_hands', winner: winnerUid, toAct: [], resultMsg, wonAmount: s.pot || 0
+      chips: newChips, pot: 0, phase: 'between_hands', winner: winnerUid, toAct: [], resultMsg, wonAmount: s.pot || 0, wonByFold: s.phase !== 'showdown'
     });
 
     // Update chips in player publicInfo
