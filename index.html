@@ -44,6 +44,98 @@
   }
   #btn-mute:hover { background: rgba(0,0,0,0.65); }
 
+  #btn-log {
+    position: absolute;
+    top: 8px; right: 44px;
+    width: 30px; height: 30px;
+    border-radius: 50%;
+    border: 1px solid rgba(255,255,255,0.25);
+    background: rgba(0,0,0,0.45);
+    color: #fff;
+    font-size: 14px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    z-index: 500;
+    padding: 0;
+    line-height: 1;
+  }
+  #btn-log:hover { background: rgba(0,0,0,0.65); }
+  #log-dialog {
+    display: none;
+    flex-direction: column;
+    width: 230px;
+    height: 860px;
+    margin-left: 14px;
+    background: #1e3d10;
+    border: 3px solid #8B5E1A;
+    border-radius: 10px;
+    overflow: hidden;
+    flex-shrink: 0;
+    transform-origin: center center;
+    transform: scale(var(--game-scale, 1));
+    box-shadow: 0 10px 40px rgba(0,0,0,0.6);
+  }
+  .log-tabs { display: flex; flex-shrink: 0; }
+  .log-tab {
+    flex: 1;
+    text-align: center;
+    padding: 10px;
+    font-size: 13px;
+    font-weight: bold;
+    color: #999;
+    background: rgba(0,0,0,0.3);
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+  }
+  .log-tab.active { color: #f4e84a; border-bottom-color: #f4e84a; background: rgba(139,94,26,0.25); }
+  .log-panel { flex: 1; overflow-y: auto; padding: 10px 12px; }
+  .log-entry {
+    background: #fdf6d8;
+    color: #3a2a08;
+    border-radius: 6px;
+    padding: 5px 9px;
+    margin-bottom: 5px;
+    font-size: 11px;
+    line-height: 1.4;
+    box-shadow: 1px 1px 3px rgba(0,0,0,0.3);
+  }
+  .log-entry .log-red { color: #cc0000; font-weight: bold; }
+  .log-gp-icon { width: 11px; height: 11px; vertical-align: -1px; image-rendering: pixelated; margin: 0 1px; }
+  .log-empty { color: #999; font-size: 12px; text-align: center; margin-top: 20px; }
+  .rank-row {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 5px;
+    padding: 8px 4px;
+    border-bottom: 1px solid rgba(255,255,255,0.08);
+  }
+  .rank-name { color: #f4e84a; font-size: 12px; font-weight: bold; }
+  .rank-cards { display: flex; gap: 3px; }
+  .rank-card {
+    width: 26px; height: 36px;
+    background: #f0f0f0;
+    border-radius: 3px;
+    border: 1px solid #ccc;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    font-size: 9px; font-weight: bold; color: #111;
+    box-shadow: 1px 1px 2px rgba(0,0,0,0.3);
+  }
+  .rank-card.red { color: #cc0000; }
+  #log-close-btn {
+    flex-shrink: 0;
+    margin: 10px;
+    padding: 8px;
+    border: none;
+    border-radius: 6px;
+    background: #8B5E1A;
+    color: #fff;
+    font-weight: bold;
+    cursor: pointer;
+  }
+
   #game-container {
     width: 620px;
     height: 860px;
@@ -1286,6 +1378,7 @@
 <body>
 <div id="game-container">
   <button id="btn-mute" onclick="toggleMute()" title="Mute sounds">🔊</button>
+  <button id="btn-log" onclick="openLogDialog()" title="Chat &amp; Hand Ranks">📜</button>
 
 
   <!-- Sign-in screen -->
@@ -1622,6 +1715,18 @@
   </div>
 </div>
 
+<div id="log-dialog">
+  <div class="log-tabs">
+    <div class="log-tab active" id="log-tab-chat" onclick="switchLogTab('chat')">Chat</div>
+    <div class="log-tab" id="log-tab-ranks" onclick="switchLogTab('ranks')">Hand Ranks</div>
+  </div>
+  <div id="log-chat-panel" class="log-panel">
+    <div id="log-chat-messages"></div>
+  </div>
+  <div id="log-ranks-panel" class="log-panel" style="display:none;"></div>
+  <button id="log-close-btn" onclick="closeLogDialog()">Close</button>
+</div>
+
 <script>
 
   const firebaseConfig = {
@@ -1717,6 +1822,114 @@ function updateMuteButton() {
   if (!btn) return;
   btn.textContent = soundMuted ? '🔇' : '🔊';
   btn.title = soundMuted ? 'Unmute sounds' : 'Mute sounds';
+}
+
+// ── Game log ("Chat" tab) + Hand Ranks reference — inspired by the classic
+// Puzzle Pirates poker side-panel: a running narration of flop/turn/river,
+// revealed hands, and pot payouts, plus a quick-reference chart of hand
+// rankings. In multiplayer this is a genuinely shared log everyone sees the
+// same copy of; in singleplayer it's just a local running list.
+let gameLog = [];
+let mpLogRef = null;
+
+function openLogDialog() {
+  document.getElementById('log-dialog').style.display = 'flex';
+  if (!document.getElementById('log-ranks-panel').dataset.built) renderHandRanksPanel();
+}
+function closeLogDialog() {
+  document.getElementById('log-dialog').style.display = 'none';
+}
+function switchLogTab(tab) {
+  document.getElementById('log-tab-chat').classList.toggle('active', tab === 'chat');
+  document.getElementById('log-tab-ranks').classList.toggle('active', tab === 'ranks');
+  document.getElementById('log-chat-panel').style.display  = tab === 'chat'  ? 'block' : 'none';
+  document.getElementById('log-ranks-panel').style.display = tab === 'ranks' ? 'block' : 'none';
+}
+
+// Writes a new log line. In multiplayer this pushes to a small shared
+// Firebase list so every player sees an identical log — rendering there
+// happens via the child_added listener (see mpSetupLogListener) rather than
+// here, so our own write doesn't get rendered twice. In singleplayer there's
+// no shared state to sync, so it renders immediately.
+function logEvent(msg) {
+  if (mpTableId && rtdb) {
+    rtdb.ref('tables/' + mpTableId + '/log').push({
+      msg, ts: firebase.database.ServerValue.TIMESTAMP
+    }).catch(() => {});
+  } else {
+    gameLog.push({ msg });
+    renderLogEntry(msg);
+  }
+}
+// Formats a single card (either a "A♠"-style string or a {rank,suit}
+// object) as HTML, colouring hearts/diamonds red like the rest of the game.
+function cardHtml(card) {
+  let rank, suit;
+  if (typeof card === 'string') { rank = card.slice(0, -1); suit = card.slice(-1); }
+  else { rank = card.rank; suit = card.suit; }
+  const isRed = suit === '♥' || suit === '♦';
+  return `<span class="${isRed ? 'log-red' : ''}">${rank}${suit}</span>`;
+}
+function cardsHtml(cards) {
+  return cards.map(cardHtml).join(' ');
+}
+function gpIconHtml() {
+  return `<img src="${POE_SRC}" class="log-gp-icon" alt="GP">`;
+}
+
+function renderLogEntry(msg) {
+  const panel = document.getElementById('log-chat-messages');
+  if (!panel) return;
+  const div = document.createElement('div');
+  div.className = 'log-entry';
+  div.innerHTML = msg;
+  panel.appendChild(div);
+  const scrollPanel = document.getElementById('log-chat-panel');
+  if (scrollPanel) scrollPanel.scrollTop = scrollPanel.scrollHeight;
+}
+function resetGameLog() {
+  gameLog = [];
+  const panel = document.getElementById('log-chat-messages');
+  if (panel) panel.innerHTML = '';
+}
+function mpSetupLogListener() {
+  if (mpLogRef) { mpLogRef.off(); mpLogRef = null; }
+  resetGameLog();
+  mpLogRef = rtdb.ref('tables/' + mpTableId + '/log');
+  mpLogRef.on('child_added', snap => {
+    const entry = snap.val();
+    if (entry && entry.msg) { gameLog.push(entry); renderLogEntry(entry.msg); }
+  });
+}
+
+function renderHandRanksPanel() {
+  const panel = document.getElementById('log-ranks-panel');
+  panel.dataset.built = '1';
+  const ranks = [
+    { name: 'Royal Flush',     cards: ['A♠','K♠','Q♠','J♠','10♠'] },
+    { name: 'Straight Flush',  cards: ['9♣','8♣','7♣','6♣','5♣'] },
+    { name: 'Four of a Kind',  cards: ['7♠','7♥','7♦','7♣','2♠'] },
+    { name: 'Full House',      cards: ['J♠','J♥','J♦','4♣','4♠'] },
+    { name: 'Flush',           cards: ['A♦','J♦','8♦','6♦','3♦'] },
+    { name: 'Straight',        cards: ['10♠','9♥','8♦','7♣','6♠'] },
+    { name: 'Three of a Kind', cards: ['5♠','5♥','5♦','K♣','2♠'] },
+    { name: 'Two Pair',        cards: ['9♠','9♥','3♦','3♣','K♠'] },
+    { name: 'Pair',            cards: ['8♠','8♥','A♦','6♣','2♠'] },
+    { name: 'High Card',       cards: ['A♠','J♥','8♦','5♣','2♠'] },
+  ];
+  panel.innerHTML = '';
+  ranks.forEach(r => {
+    const row = document.createElement('div');
+    row.className = 'rank-row';
+    const cardsHtml = r.cards.map(c => {
+      const suit = c.slice(-1);
+      const rank = c.slice(0, -1);
+      const isRed = suit === '♥' || suit === '♦';
+      return `<div class="rank-card${isRed ? ' red' : ''}"><div>${rank}</div><div>${suit}</div></div>`;
+    }).join('');
+    row.innerHTML = `<div class="rank-name">${r.name}</div><div class="rank-cards">${cardsHtml}</div>`;
+    panel.appendChild(row);
+  });
 }
 
 function playPayIntoPotSound() {
@@ -2066,7 +2279,7 @@ function nextAction() {
 
   // If only one player hasn't folded, they win immediately
   const remaining = state.activePids.filter(p => !state.folded.has(p));
-  if (remaining.length === 1) { awardPot({ [remaining[0]]: state.pot }); return; }
+  if (remaining.length === 1) { awardPot({ [remaining[0]]: state.pot }, null); return; }
 
   // Queue empty → street is over
   if (state.toAct.length === 0) { advancePhase(); return; }
@@ -2093,16 +2306,19 @@ function advancePhase() {
     state.phase = 'flop';
     state.community.push(state.deck.pop(), state.deck.pop(), state.deck.pop());
     renderCommunity(); setStatus('— Flop —');
+    logEvent('Flop: ' + cardsHtml(state.community.slice(0, 3)));
     setTimeout(() => { if (currentTable === null) return; startBettingRound(); }, 700);
   } else if (state.phase === 'flop') {
     state.phase = 'turn';
     state.community.push(state.deck.pop());
     renderCommunity(); setStatus('— Turn —');
+    logEvent('Turn: ' + cardHtml(state.community[3]));
     setTimeout(() => { if (currentTable === null) return; startBettingRound(); }, 700);
   } else if (state.phase === 'turn') {
     state.phase = 'river';
     state.community.push(state.deck.pop());
     renderCommunity(); setStatus('— River —');
+    logEvent('River: ' + cardHtml(state.community[4]));
     setTimeout(() => { if (currentTable === null) return; startBettingRound(); }, 700);
   } else {
     showdown();
@@ -2300,20 +2516,28 @@ function evaluateSimple(cards) {
 // ============================================================
 function showdown() {
   const remaining = state.activePids.filter(p => !state.folded.has(p));
-  if (remaining.length === 1) { awardPot({ [remaining[0]]: state.pot }); return; }
+  if (remaining.length === 1) { awardPot({ [remaining[0]]: state.pot }, null); return; }
 
   // Reveal all hands
   renderAllHands(true);
+
+  const handNames = ['High Card','Pair','Two Pair','Three of a Kind','Straight','Flush','Full House','Four of a Kind','Straight Flush','Royal Flush'];
+  remaining.forEach(pid => {
+    const all = [...state.hands[pid], ...state.community];
+    const { score, combo } = getBestHand(all);
+    const name = handNames[Math.min(Math.floor(score / 1e12), 9)] || '';
+    logEvent(getPlayerName(pid) + ' has ' + name.toLowerCase() + '.<br>' + cardsHtml(combo));
+  });
 
   setTimeout(() => {
     if (currentTable === null) return;
     const foldedStrs = new Set([...state.folded].map(String));
     const pots = computeSidePots(state.totalBets, (pid) => foldedStrs.has(String(pid)));
-    const winnings = distributePots(pots, (pid) => {
+    const { winnings, potResults } = distributePots(pots, (pid) => {
       const all = [...state.hands[pid], ...state.community];
       return getBestHandScore(all);
     });
-    awardPot(winnings);
+    awardPot(winnings, potResults);
   }, 1200);
 }
 
@@ -2353,9 +2577,14 @@ function computeSidePots(totalContributed, isFoldedFn) {
 // scoreFn(pid) => numeric hand-strength score (higher wins). Evaluates each
 // pot independently from smallest to largest contribution level; ties
 // within a pot split it evenly (any remainder GP goes to the first tied
-// winners so nothing is lost to rounding). Returns { pid: totalAmountWon }.
+// winners so nothing is lost to rounding). Returns { winnings, potResults }
+// — winnings is { pid: totalAmountWon } summed across every pot a player
+// won; potResults is a per-pot breakdown (amount + { pid: amountWon }),
+// ordered main pot first then side pots, useful for narrating exactly which
+// pot someone won in a game log.
 function distributePots(pots, scoreFn) {
   const winnings = {};
+  const potResults = [];
   for (const pot of pots) {
     if (pot.eligiblePids.length === 0) continue;
     let winnerSet;
@@ -2372,24 +2601,35 @@ function distributePots(pots, scoreFn) {
     }
     const share = Math.floor(pot.amount / winnerSet.length);
     let remainder = pot.amount - share * winnerSet.length;
+    const potWinners = {};
     for (const pid of winnerSet) {
       const extra = remainder > 0 ? 1 : 0;
       if (remainder > 0) remainder--;
-      winnings[pid] = (winnings[pid] || 0) + share + extra;
+      const amt = share + extra;
+      winnings[pid] = (winnings[pid] || 0) + amt;
+      potWinners[pid] = amt;
     }
+    potResults.push({ amount: pot.amount, winners: potWinners });
   }
-  return winnings;
+  return { winnings, potResults };
 }
 
 function getBestHandScore(cards) {
-  // Evaluate best 5-card hand from 7
+  return getBestHand(cards).score;
+}
+
+// Same evaluation as getBestHandScore, but also returns which 5 cards
+// actually form the best hand — needed to show e.g. "(2♠ 2♥ 2♦ J♣ J♠)" in
+// the game log rather than just the hand name.
+function getBestHand(cards) {
   let best = 0;
+  let bestCombo = null;
   const combos = getCombinations(cards, 5);
   for (let combo of combos) {
     const score = scoreHand(combo);
-    if (score > best) best = score;
+    if (score > best) { best = score; bestCombo = combo; }
   }
-  return best;
+  return { score: best, combo: bestCombo };
 }
 
 function getCombinations(arr, k) {
@@ -2471,7 +2711,7 @@ function animatePotToWinner(winnerSeatId, amount, onComplete) {
   requestAnimationFrame(step);
 }
 
-function awardPot(winnings) {
+function awardPot(winnings, potResults) {
   // winnings: { pid: amountWon } — may include multiple winners at
   // different amounts when side pots are involved, not just an even split.
   const winnerPids = Object.keys(winnings).filter(p => winnings[p] > 0);
@@ -2482,6 +2722,21 @@ function awardPot(winnings) {
   if (winnerPids.length === 1 && state.community.length === 5 && state.hands[winnerPids[0]]) {
     const score = Math.floor(getBestHandScore([...state.hands[winnerPids[0]], ...state.community]) / 1e12);
     handName = handNames[Math.min(score, 9)] || '';
+  }
+
+  // Log the payout(s) — "won X from the main pot" / "a side pot", matching
+  // each pot's actual eligible winner(s) rather than the flattened total.
+  if (potResults && potResults.length > 0) {
+    potResults.forEach((pot, idx) => {
+      const label = idx === 0 ? 'the main pot' : 'a side pot';
+      Object.keys(pot.winners).forEach(pid => {
+        logEvent(getPlayerName(pid) + ' won ' + fmt(pot.winners[pid]) + ' ' + gpIconHtml() + ' from ' + label + '!');
+      });
+    });
+  } else {
+    winnerPids.forEach(pid => {
+      logEvent(getPlayerName(pid) + ' won ' + fmt(winnings[pid]) + ' ' + gpIconHtml() + '!');
+    });
   }
 
   const playerShare = winnings[PLAYER_ID] || 0;
@@ -2584,6 +2839,7 @@ function awardPot(winnings) {
             _playerChips = rebuyAmount;
             playBuyInSound();
             saveBankroll();
+            logEvent('You rebought for ' + fmt(rebuyAmount) + ' ' + gpIconHtml() + '.');
             document.getElementById('chips-player').textContent = fmt(_playerChips);
             document.getElementById('message-overlay').style.display = 'none';
             btn.onclick = nextHand;
@@ -3422,6 +3678,8 @@ function confirmBuyin() {
   bankroll -= tableBuyIn;
   playBuyInSound();
   saveBankroll();
+  resetGameLog();
+  logEvent('You bought in for ' + fmt(amount) + ' ' + gpIconHtml() + '.');
 
   // Configure table stakes
   state.minBet = t.bb;
@@ -3557,6 +3815,7 @@ function mpShowRebuyPrompt(s) {
       mpBuyIn += rebuyAmount; // count toward session net, not just the original buy-in
       playBuyInSound();
       saveBankroll();
+      logEvent('You rebought for ' + fmt(rebuyAmount) + ' ' + gpIconHtml() + '.');
       document.getElementById('message-overlay').style.display = 'none';
       btn2.style.display = 'none';
       try {
@@ -3591,6 +3850,7 @@ async function mpFinishCashOut(s) {
   _mpCashOutInProgress = true;
   const myChips = parseInt((s.chips && s.chips[mpMyUid]) || 0) || 0;
   if (myChips > 0) playCashOutSound();
+  if (myChips > 0) logEvent('You cashed out with ' + fmt(myChips) + ' ' + gpIconHtml() + '.');
   recordResult(myChips - mpBuyIn);
   bankroll += myChips;
   saveBankroll();
@@ -3627,6 +3887,7 @@ function leaveTable() {
   const net = _playerChips - tableBuyIn;
   recordResult(net);
   if (_playerChips > 0) playCashOutSound();
+  if (_playerChips > 0) logEvent('You cashed out with ' + fmt(_playerChips) + ' ' + gpIconHtml() + '.');
   bankroll += _playerChips;
   _playerChips = 0;
   saveBankroll();
@@ -3988,6 +4249,7 @@ async function createTable() {
 
   closeCreateTable();
   enterWaitingRoom(tableId, true);
+  logEvent('You bought in for ' + fmt(buyIn) + ' ' + gpIconHtml() + '.');
   } finally {
     _mpJoinOrCreateInFlight = false;
     if (createBtn) createBtn.disabled = false;
@@ -4072,6 +4334,7 @@ async function joinTable(tableId) {
 
   closeJoinCode();
   enterWaitingRoom(tableId, false);
+  logEvent('You bought in for ' + fmt(buyIn) + ' ' + gpIconHtml() + '.');
   } finally {
     _mpJoinOrCreateInFlight = false;
   }
@@ -4298,6 +4561,7 @@ function startMPGame(tableData) {
   _mpRevealedForHand = null;
   _mpHandEndTimer = null;
   _mpDealNextTimer = null;
+  mpSetupLogListener();
 
   const cfg = tableData.config;
   const players = tableData.players || {};
@@ -4951,12 +5215,15 @@ async function mpAdvancePhase(s) {
   if (s.phase === 'preflop') {
     community = [deck.shift(), deck.shift(), deck.shift()];
     s.phase = 'flop';
+    logEvent('Flop: ' + cardsHtml(community));
   } else if (s.phase === 'flop') {
     community.push(deck.shift());
     s.phase = 'turn';
+    logEvent('Turn: ' + cardHtml(community[3]));
   } else if (s.phase === 'turn') {
     community.push(deck.shift());
     s.phase = 'river';
+    logEvent('River: ' + cardHtml(community[4]));
   } else if (s.phase === 'river') {
     s.phase = 'showdown';
   }
@@ -4998,6 +5265,7 @@ function mpHandEnded(s, players) {
 
   _mpHandEndTimer = setTimeout(async () => {
     let winnings = {};
+    let potResults = null;
     let handName = '';
     const handNames = ['High Card','Pair','Two Pair','Three of a Kind','Straight','Flush','Full House','Four of a Kind','Straight Flush','Royal Flush'];
     const wonByFold = !!s.winner;
@@ -5021,11 +5289,22 @@ function mpHandEnded(s, players) {
       );
       const allCards = await Promise.all(cardFetches);
       const scores = {};
+      const combos = {};
       allCards.forEach(({ uid, cards }) => {
         if (!cards || !cards.c1 || !cards.c2) return;
         const hand = [cards.c1, cards.c2].map(c => ({ rank: c.slice(0,-1), suit: c.slice(-1) }));
-        scores[uid] = getBestHandScore([...hand, ...community]);
+        const best = getBestHand([...hand, ...community]);
+        scores[uid] = best.score;
+        combos[uid] = best.combo;
         console.log(uid, 'hand score:', scores[uid]);
+      });
+
+      // Log each shown hand
+      active.forEach(uid => {
+        if (scores[uid] === undefined) return;
+        const name = handNames[Math.min(Math.floor(scores[uid] / 1e12), 9)] || '';
+        const pname = (players[uid] && players[uid].publicInfo && players[uid].publicInfo.name) || 'Player';
+        logEvent(pname + ' has ' + name.toLowerCase() + '.<br>' + cardsHtml(combos[uid]));
       });
 
       // Side pots — a player who went all-in for less than others can only
@@ -5033,7 +5312,9 @@ function mpHandEnded(s, players) {
       // that forms side pots only the bigger stacks compete for.
       const totalBets = s.totalBets || {};
       const pots = computeSidePots(totalBets, (pid) => !!folded[pid]);
-      winnings = distributePots(pots, (pid) => (scores[pid] !== undefined ? scores[pid] : -1));
+      const dist = distributePots(pots, (pid) => (scores[pid] !== undefined ? scores[pid] : -1));
+      winnings = dist.winnings;
+      potResults = dist.potResults;
 
       const winnerUidsForName = Object.keys(winnings).filter(u => winnings[u] > 0);
       if (winnerUidsForName.length === 1 && scores[winnerUidsForName[0]] !== undefined) {
@@ -5056,6 +5337,24 @@ function mpHandEnded(s, players) {
       .map(u => (players[u] && players[u].publicInfo && players[u].publicInfo.name) || 'Player')
       .join(' & ');
     const resultMsg = '🏆 ' + names + ' Wins! ' + (handName ? '(' + handName + ') ' : '') + fmt(totalAwarded) + ' GP';
+
+    // Log the payout(s) — "won X from the main pot" / "a side pot" when we
+    // have per-pot detail (a genuine showdown); a simple message otherwise
+    // (everyone else folded, no side-pot math needed).
+    if (potResults && potResults.length > 0) {
+      potResults.forEach((pot, idx) => {
+        const label = idx === 0 ? 'the main pot' : 'a side pot';
+        Object.keys(pot.winners).forEach(uid => {
+          const pname = (players[uid] && players[uid].publicInfo && players[uid].publicInfo.name) || 'Player';
+          logEvent(pname + ' won ' + fmt(pot.winners[uid]) + ' ' + gpIconHtml() + ' from ' + label + '!');
+        });
+      });
+    } else {
+      winnerUids.forEach(uid => {
+        const pname = (players[uid] && players[uid].publicInfo && players[uid].publicInfo.name) || 'Player';
+        logEvent(pname + ' won ' + fmt(winnings[uid]) + ' ' + gpIconHtml() + '!');
+      });
+    }
 
     // Award pot(s)
     const chips = typeof s.chips === 'object' ? s.chips : {};
@@ -5190,6 +5489,7 @@ async function mpAutoFoldDisconnected(uid) {
 // ── Leave multiplayer game
 function mpLeaveGame() {
   try { localStorage.removeItem('pirate_poker_mp_table'); } catch (e) { /* ignore */ }
+  if (mpLogRef) { mpLogRef.off(); mpLogRef = null; }
   if (mpStateRef) { mpStateRef.off(); mpStateRef = null; }
   if (mpTableRef) { mpTableRef.off(); mpTableRef = null; }
   Object.values(mpTimeoutTimers).forEach(clearTimeout);
@@ -5221,12 +5521,19 @@ function scaleGame() {
   const scaleX = window.innerWidth  / W;
   const scaleY = window.innerHeight / H;
   const scale  = Math.min(scaleX, scaleY, 1); // never scale up beyond 1
-  document.getElementById('game-container').style.setProperty('--game-scale', scale);
+  // Set on the root so both #game-container and the sibling #log-dialog
+  // panel (which sits beside it, not inside it) scale in sync.
+  document.documentElement.style.setProperty('--game-scale', scale);
   // Adjust body so the scaled container doesn't cause overflow
   const container = document.getElementById('game-container');
   container.style.transform = `scale(${scale})`;
   container.style.marginTop  = `${(H * scale - H) / 2}px`;
   container.style.marginBottom = `${(H * scale - H) / 2}px`;
+  const logDialog = document.getElementById('log-dialog');
+  if (logDialog) {
+    logDialog.style.marginTop    = `${(H * scale - H) / 2}px`;
+    logDialog.style.marginBottom = `${(H * scale - H) / 2}px`;
+  }
 }
 window.addEventListener('resize', scaleGame);
 
