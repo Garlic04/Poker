@@ -185,6 +185,10 @@
     width: 80px; height: 45px;
     image-rendering: auto;
   }
+  .coin-fly.bet {
+    width: 42px; height: 25px;
+    image-rendering: auto;
+  }
   @keyframes coinFly {
     0%   { opacity: 1; transform: scale(1); }
     80%  { opacity: 1; transform: scale(0.7); }
@@ -367,7 +371,7 @@
   /* Pot area */
   #pot-area {
     position: absolute;
-    top: 218px;
+    top: 196px;
     left: 50%;
     transform: translateX(-50%);
     display: flex;
@@ -377,7 +381,7 @@
     z-index: 10;
   }
   #pot-icon {
-    width: 130px; height: 73px;
+    width: 170px; height: 95px;
     margin: 0 auto 2px;
     object-fit: contain;
     object-position: bottom center;
@@ -405,6 +409,36 @@
     text-shadow: 1px 1px 2px #000;
     display: none;
   }
+
+  .bet-marker {
+    position: absolute;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1px;
+    z-index: 12;
+    transform: translate(-50%, -50%);
+    pointer-events: none;
+    opacity: 0;
+  }
+  .bet-marker.visible { opacity: 1; }
+  .bet-marker img { width: 42px; height: 25px; image-rendering: auto; }
+  .bet-marker span {
+    font-size: 11px;
+    font-weight: bold;
+    color: #fff;
+    background: rgba(0,0,0,0.55);
+    padding: 0 5px;
+    border-radius: 3px;
+    text-shadow: 1px 1px 2px #000;
+  }
+  /* Positioned partway between each seat and the table centre (310,356) */
+  #bet-marker-player { left: 310px; top: 514px; }
+  #bet-marker-0      { left: 310px; top: 198px; }
+  #bet-marker-1      { left: 175px; top: 310px; }
+  #bet-marker-2      { left: 175px; top: 402px; }
+  #bet-marker-3      { left: 445px; top: 310px; }
+  #bet-marker-4      { left: 445px; top: 402px; }
 
   /* ── Bottom HUD ── */
   #hud {
@@ -1663,6 +1697,17 @@
     <div id="pot-label">600</div>
   </div>
 
+  <!-- Per-seat "bet on the table" markers — a player's current bet rests
+       here (between their seat and the pot) until the betting round closes
+       and it sweeps into the pot, instead of flying straight into the pot
+       on every single action. -->
+  <div class="bet-marker" id="bet-marker-0"><img src="" alt=""><span></span></div>
+  <div class="bet-marker" id="bet-marker-1"><img src="" alt=""><span></span></div>
+  <div class="bet-marker" id="bet-marker-2"><img src="" alt=""><span></span></div>
+  <div class="bet-marker" id="bet-marker-3"><img src="" alt=""><span></span></div>
+  <div class="bet-marker" id="bet-marker-4"><img src="" alt=""><span></span></div>
+  <div class="bet-marker" id="bet-marker-player"><img src="" alt=""><span></span></div>
+
   <!-- Community cards -->
   <div id="community-area"></div>
 
@@ -1781,6 +1826,12 @@ const PLAYERS = [
 
 
 const POE_SRC = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABMAAAAQCAMAAAG0HYTGAAAABGdBTUEAALGOfPtRkwAAACBjSFJNAAB6JQAAgIMAAPn/AACA6AAAdTAAAOpgAAA6lwAAF2+XqZnUAAADAFBMVEUADAAACAAAAgAAAQAvOS8vNi8EIQAJGgBAVy8bNAATJQCp1GI6WAAlOQDF44xohSBjbQCVnFCGiSzO0XiipCBpZgCnoyOini3m5cN7dQC/umSpoUPAumG8t3DKv1lkVwCTiTuhjyLXvjzUuz3XxF/Kumnm1IDm2Zvm4MDApDDKrTTm2aHXvmLm0YLm04nm1pnm2KLRqSPmvTnm2Krjpwbmw1/mxGHmxnDm0Zjm16vm2bbmqBXWoBfmw23mxnfm0Z3WoCPmsDHmsT3mtknkv2nm2LrLlSnms03mtFS2hTDmsVTm0KvmxJAvLy////8AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAADGzNoNAAAAT3RSTlP///////////////////////////////////////////////////////////////////////////////////////////////////////8APVawswAAAL5JREFUKM+NjVc7A1EAREeid3GFqwWrrLq6DVZEdOb8/5/jYZV9NI/nmzMjQNgCha4IOYjb0b2GAFBMDIrHK49o+CZbRni+yE0pxjTDBuFmy+/tyymEQ5GOXKyZcqOsxt3DHoAcijT7ZkluG+QQ7gauXmcQzTjd6+xPWt44P51bPdiyiCHx7EMdgW3XbPtv2b/5HxvyRGNp3FVWX3/aaZ8djQ3658N29+V6ofP58eaK27e9eXL/vKhqz9T6y6MvvXNLK0dqGK4AAAAASUVORK5CYII=";
+// Single consistent icon for each player's current bet resting on the
+// table in front of them (not yet swept into the pot) — distinct from the
+// tiered pile sprite used for the pot itself and for paying out to the
+// winner, which stay tiered.
+const BET_PILE_SRC = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAADIAAAAeCAMAAABZj73OAAABfVBMVEX///+mbQLFgQKqZgHLjAPMhAHTlQO/hQNqQwT0qwPUjAKzcgLbkwK8cgGNVwH6ugQfCAaVXAK9egGubAKgagNkOwRaNASgXgGeUwKQXQOUTwIiCwZmJAOtdgJzQwLvrQPNlwXajgK5dwItEgaiZAImDQbbnQPotwk9HQVFJQVDIgQGAQHqnQL1ugV9RwJPLAHThgCNQAGIUgTTmgTSngi8gANyTAR9UwSzagMLAgLXqgvKfAHCdwEYBQWyegKaZAEzFgXzswT9xQnFjwT5zQ/FfAHlqARIIAGENwNaIgJ+TgP9swLgoALhrwnkmgPjkwHxogL4rwPElQf7vQjppAJ5OwGTZAQPAwPtvwrHhgMgCQbXhAAVBQUbBQb+wgatfgbTfwCmVwG3gAT0wws3GQS5fgL82hXAgAKXaQMfBwZqUQkMAwP0uwkbBgZ2JgPDhQchCgb9zA27mA60fAn90w/fkAI8EgTtlAAJAgKYRAX64BuZcgiJbw4HAgIcBga0l4xQAAAAAXRSTlMAQObYZgAAAvNJREFUOBGNwdO2HFkAANBTNtqotm3b9rWN2MnwfHvmdVZ1J3dvAHb4V/aGIi2/DKPghaDXqOH66K0lrEDwIu/uEXeKQInFmkFCELwAvO8v+zg5I7Wl6ooNQ/BbsMXGPGT7Mu6iHkyms2oIgt+Rm1NPVpL2mwcH9oCH62u8UfBrb0L7KertlBGs6bGGIbINzPgK/JpMr7TzvfV+6WZkw9ucy4Vl/GC3P6D80Z/h88E9Zs0KHC7ta7pzu6kFdimftsI0bbSw1LG0YqbSZeey3WhUGtg92EH2FtBFDBUzLHXcYdrSAC19CToJ0lNqge3eGU9iRE0nJgtue+XxTnJif6bf69u8r1ZTwFZvjCiBuiqVq9eGFPb5r8eOE0uPxomB/v21BYJtoiGKyAd7neDnf17fXiOVx158hiUSX7oH5h+OC7ANPHRzwU+d+Hzzd6HA9rn510+dePC4Yr5ZahNeCNTkCF7LfY2TJ+TmymIoLlJc7q7X6x1zNzEiSYtyFKgoBh6b3zUTVhPe1VsMhwt3DXdtPniE5YmhRRORI6Bymlmac1e2tNmcJR/sSKGILpZENcWzemOSnvCJc6Di17jNuGU8SuPOvAZ5sB9O9IjuhGw4IsmCXufW14GKIqbS+Zw182FvYLZaUbxryRiGdDE5HIafAyiL1IGKMjkbaZj42z0JGZmtuDPg8zi+G4vJsc1IxbW8rw5U5PCZFUP5mXOtsaUPyEteyxtCRbtlbLN1SS7mOAcq8ONTTRtAxCeJstn0klPrfjLSz1QAcTzjOpaJHAG1i+QZ4grmEbbdaGYDHsJdpA8R+8w5COhKDHUaBWpRmBGauWBWS+IUhxExMeIQmxYdyvtM35gwBNuUvVbBZ+9SJjNWXU11w6Hoyg5cs7zpejqBYLuy11ESBKH6LbYO0BHR5Lvd5DZXvupqopTBDlElYhB1qFZv8F5chHzXgg7DhJQnLJfBbuVX/v+cQggAVEIOq0mTCCsQvNjReb1ePz+Kgv/7CQ3fjCj1+kGIAAAAAElFTkSuQmCC";
+
 const POT_PILE_SRCS = [
   "data:image/png;base64,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", // 1
   "data:image/png;base64,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", // 2
@@ -2041,6 +2092,133 @@ function playBuyInSound() {
   } catch (e) { /* ignore */ }
 }
 
+// ── Per-seat bet markers ────────────────────────────────────────────────
+// A player's current bet rests as a small pile in front of their own seat
+// (like the classic "bet on the table" look) instead of flying straight
+// into the pot on every action. It stays there, updating if they bet again
+// on the same street, until the betting round closes — at which point
+// sweepBetMarkersToPot() sends everything on the table into the pot at
+// once and clears the markers.
+function betMarkerIdFor(seatId) {
+  return 'bet-marker-' + seatId.replace('seat-', '');
+}
+function showBetMarker(seatId, amount) {
+  const marker = document.getElementById(betMarkerIdFor(seatId));
+  if (!marker) return;
+  const img = marker.querySelector('img');
+  const span = marker.querySelector('span');
+  if (img) img.src = BET_PILE_SRC;
+  if (span) span.textContent = fmtCompact(amount);
+  marker.classList.add('visible');
+}
+function hideBetMarker(seatId) {
+  const marker = document.getElementById(betMarkerIdFor(seatId));
+  if (marker) marker.classList.remove('visible');
+}
+function hideAllBetMarkers() {
+  document.querySelectorAll('.bet-marker').forEach(m => m.classList.remove('visible'));
+}
+
+// Animates a coin from the player's seat to their own bet-marker spot (not
+// all the way to the pot), then reveals/updates that marker with the
+// current amount once it lands.
+let _pendingBetMarkerFlights = 0; // coins currently mid-flight from a seat to their marker
+
+function animateBetToMarker(fromSeatId, amount) {
+  const fromEl = document.getElementById(fromSeatId);
+  const markerEl = document.getElementById(betMarkerIdFor(fromSeatId));
+  if (!fromEl || !markerEl) return;
+
+  const fromR = fromEl.querySelector('.avatar-frame')?.getBoundingClientRect()
+              || fromEl.getBoundingClientRect();
+  const toR = markerEl.getBoundingClientRect();
+  const sx = fromR.left + fromR.width / 2;
+  const sy = fromR.top + fromR.height / 2;
+  const ex = toR.left + toR.width / 2;
+  const ey = toR.top + toR.height / 2;
+
+  const img = document.createElement('img');
+  img.src = BET_PILE_SRC;
+  img.className = 'coin-fly bet';
+  img.style.left = sx + 'px';
+  img.style.top  = sy + 'px';
+  document.body.appendChild(img);
+  playPayIntoPotSound();
+  _pendingBetMarkerFlights++;
+
+  const duration = 400;
+  const start = performance.now();
+  function step(now) {
+    const t = Math.min((now - start) / duration, 1);
+    const e = t < 0.5 ? 2*t*t : -1+(4-2*t)*t;
+    img.style.left = (sx + (ex - sx) * e) + 'px';
+    img.style.top  = (sy + (ey - sy) * e) + 'px';
+    img.style.opacity = t > 0.8 ? String(1 - (t - 0.8) * 5) : '1';
+    if (t < 1) requestAnimationFrame(step);
+    else {
+      img.remove();
+      showBetMarker(fromSeatId, amount);
+      _pendingBetMarkerFlights--;
+    }
+  }
+  requestAnimationFrame(step);
+}
+
+// Sweeps every currently-visible bet marker into the pot at once — called
+// whenever a betting round actually closes (moving to the next street, or
+// the hand ending), never mid-round.
+function sweepBetMarkersToPot(onLanded) {
+  if (_pendingBetMarkerFlights > 0) {
+    // A coin is still mid-flight from a seat to its marker — if we sweep
+    // now, it hasn't been marked "visible" yet so it would be missed
+    // entirely, leaving it stranded on the table into the next round
+    // instead of actually being caught in this sweep. Wait for it to land.
+    setTimeout(() => sweepBetMarkersToPot(onLanded), 50);
+    return;
+  }
+  const potEl = document.getElementById('pot-area');
+  const markers = document.querySelectorAll('.bet-marker.visible');
+  if (!potEl || markers.length === 0) {
+    hideAllBetMarkers();
+    if (onLanded) onLanded();
+    return;
+  }
+  const potR = potEl.getBoundingClientRect();
+  const ex = potR.left + potR.width / 2;
+  const ey = potR.top + potR.height / 2;
+  let pending = markers.length;
+
+  markers.forEach(marker => {
+    const r = marker.getBoundingClientRect();
+    const sx = r.left + r.width / 2;
+    const sy = r.top + r.height / 2;
+    const img = document.createElement('img');
+    img.src = BET_PILE_SRC;
+    img.className = 'coin-fly bet';
+    img.style.left = sx + 'px';
+    img.style.top  = sy + 'px';
+    document.body.appendChild(img);
+
+    const duration = 350;
+    const start = performance.now();
+    function step(now) {
+      const t = Math.min((now - start) / duration, 1);
+      const e = t < 0.5 ? 2*t*t : -1+(4-2*t)*t;
+      img.style.left = (sx + (ex - sx) * e) + 'px';
+      img.style.top  = (sy + (ey - sy) * e) + 'px';
+      img.style.opacity = t > 0.7 ? String(1 - (t - 0.7) * (1/0.3)) : '1';
+      if (t < 1) requestAnimationFrame(step);
+      else {
+        img.remove();
+        pending--;
+        if (pending === 0 && onLanded) onLanded();
+      }
+    }
+    requestAnimationFrame(step);
+  });
+  hideAllBetMarkers();
+}
+
 function animateCoinToPot(fromSeatId, amount) {
   const fromEl = document.getElementById(fromSeatId);
   const potEl  = document.getElementById('pot-area');
@@ -2101,6 +2279,8 @@ let _nextActionTimer = null;
 
 function initHand() {
   _aiMoodClock++; // advances each hand — drives each AI's slow personality "mood wave"
+  hideAllBetMarkers(); // defensive — should already be clear via sweeps, but never start a hand with a stale marker showing
+  displayedPot = 0;
 
   // Build deck
   let deck = [];
@@ -2176,11 +2356,11 @@ function postBlind(pid, amount) {
   state.totalBets[pid] = (state.totalBets[pid]||0) + actual;
   state.pot += actual;
   setChips(pid, chips - actual);
-  // Animate coin flying to pot — same treatment as a regular bet, so it's
-  // clear where the blind money is actually coming from instead of it just
-  // silently appearing in the pot.
+  // Animate coin to the player's own bet marker (resting on the table in
+  // front of them) rather than straight into the pot — it sweeps into the
+  // pot once the betting round actually closes.
   const seatId = pid === PLAYER_ID ? 'seat-player' : 'seat-' + pid;
-  animateCoinToPot(seatId, actual);
+  animateBetToMarker(seatId, state.bets[pid]);
   // If posting blind used all their chips, mark as all-in
   if (getChips(pid) === 0) state.allin.add(pid);
 }
@@ -2289,7 +2469,7 @@ function nextAction() {
 
   // If only one player hasn't folded, they win immediately
   const remaining = state.activePids.filter(p => !state.folded.has(p));
-  if (remaining.length === 1) { awardPot({ [remaining[0]]: state.pot }, null); return; }
+  if (remaining.length === 1) { sweepBetMarkersToPot(() => { displayedPot = state.pot; renderPot(); }); awardPot({ [remaining[0]]: state.pot }, null); return; }
 
   // If at most one remaining player isn't already all-in, there's no more
   // betting to be had — everyone else can't respond either way. Only
@@ -2325,6 +2505,7 @@ function nextAction() {
 
 function advancePhase() {
   clearHighlight();
+  sweepBetMarkersToPot(() => { displayedPot = state.pot; renderPot(); });
   state.raisesThisRound = 0;
   if (state.phase === 'preflop') {
     state.phase = 'flop';
@@ -2414,9 +2595,10 @@ function placeBet(pid, amount) {
   state.totalBets[pid] = (state.totalBets[pid] || 0) + actual;
   state.pot += actual;
   setChips(pid, chips - actual);
-  // Animate coin flying to pot
+  // Animate coin to the player's own bet marker (resting on the table in
+  // front of them) rather than straight into the pot.
   const seatId = pid === PLAYER_ID ? 'seat-player' : 'seat-' + pid;
-  animateCoinToPot(seatId, actual);
+  animateBetToMarker(seatId, state.bets[pid]);
   saveSession();
 }
 
@@ -2611,7 +2793,7 @@ function evaluateSimple(cards) {
 // ============================================================
 function showdown() {
   const remaining = state.activePids.filter(p => !state.folded.has(p));
-  if (remaining.length === 1) { awardPot({ [remaining[0]]: state.pot }, null); return; }
+  if (remaining.length === 1) { sweepBetMarkersToPot(() => { displayedPot = state.pot; renderPot(); }); awardPot({ [remaining[0]]: state.pot }, null); return; }
 
   // Reveal all hands
   renderAllHands(true);
@@ -2873,6 +3055,7 @@ function awardPot(winnings, potResults) {
     // this it just sat there showing the old total until the next hand
     // dealt, even though the coins had already flown to the winner.
     state.pot = 0;
+    displayedPot = 0;
     renderPot();
 
     const activePidsNext = [0,3,4,PLAYER_ID,2,1].filter(pid =>
@@ -3077,11 +3260,12 @@ function renderChips() {
   }
 }
 
+let displayedPot = 0; // what the pot label/icon actually show — only catches up to state.pot when bets sweep in, not the instant a bet is placed
 function renderPot() {
-  document.getElementById('pot-label').textContent = fmtCompact(state.pot || 0);
+  document.getElementById('pot-label').textContent = fmtCompact(displayedPot);
   const icon = document.getElementById('pot-icon');
   if (icon) {
-    const src = potPileImage(state.pot || 0);
+    const src = potPileImage(displayedPot);
     icon.style.visibility = src ? 'visible' : 'hidden';
     if (src) icon.src = src;
   }
@@ -4619,6 +4803,8 @@ let mpStateRef  = null;  // ref to listen to state
 let mpDisconnectRef = null;
 let _mpPrevActionSeq = null;    // for detecting new check/call/bet/raise actions
 let _mpPrevBlindsHand = null;   // hand number we've already animated blinds for
+let _mpPrevSweepPhase = null;   // last phase we swept bet markers for
+let mpDisplayedPot = 0;         // what the pot label/icon actually show for MP — synced at sweep time
 let _mpBustPromptedForHand = null; // hand number we've already shown the rebuy prompt for
 let _mpRevealedForHand = null;     // hand number we've already revealed showdown hands for
 let _mpWinnerAnimatedForHand = null; // hand number we've already animated pot->winner for
@@ -4652,6 +4838,8 @@ function startMPGame(tableData) {
   _mpPrevFolded = {};
   _mpPrevActionSeq = null;
   _mpPrevBlindsHand = null;
+  _mpPrevSweepPhase = null;
+  mpDisplayedPot = 0;
   _mpBustPromptedForHand = null;
   _mpRevealedForHand = null;
   _mpHandEndTimer = null;
@@ -4793,6 +4981,7 @@ let _mpDealingHand = false;
 async function mpDealNewHand(tableData) {
   if (_mpDealingHand) { console.log('mpDealNewHand: already dealing, skipping'); return; }
   _mpDealingHand = true;
+  hideAllBetMarkers(); // defensive — should already be clear via sweeps, but never start a hand with a stale marker showing
   const players = tableData.players || {};
   try {
   const activePids = Object.keys(players).filter(uid => {
@@ -4894,6 +5083,34 @@ function getPreFlopOrder(pids, bbIdx) {
 function renderMPState(s, players) {
   if (!s) return;
 
+  // Any phase change means the previous betting round has definitively
+  // closed (new street dealt, or the hand ended) — sweep whatever's still
+  // resting on the table from that round into the pot before anything new
+  // gets rendered for the phase we're entering.
+  if (s.phase !== _mpPrevSweepPhase) {
+    if (s.phase === 'preflop') {
+      // Fresh hand starting, not a round closing — nothing's been bet yet
+      // to sweep. Just reset the display; blinds will animate in as their
+      // own fresh markers via the blinds-animation block below.
+      mpDisplayedPot = 0;
+      document.getElementById('pot-label').textContent = fmtCompact(mpDisplayedPot);
+      const potIconEl0 = document.getElementById('pot-icon');
+      if (potIconEl0) potIconEl0.style.visibility = 'hidden';
+    } else {
+      sweepBetMarkersToPot(() => {
+        mpDisplayedPot = s.pot || 0;
+        document.getElementById('pot-label').textContent = fmtCompact(mpDisplayedPot);
+        const potIconEl = document.getElementById('pot-icon');
+        if (potIconEl) {
+          const src = potPileImage(mpDisplayedPot);
+          potIconEl.style.visibility = src ? 'visible' : 'hidden';
+          if (src) potIconEl.src = src;
+        }
+      });
+    }
+    _mpPrevSweepPhase = s.phase;
+  }
+
   // Update chips display for all seats
   document.querySelectorAll('.seat[data-mp-uid]').forEach(el => {
     const uid = el.dataset.mpUid;
@@ -4932,7 +5149,8 @@ function renderMPState(s, players) {
         playCheckSound();
       } else if ((s.lastActionType === 'call' || s.lastActionType === 'bet' || s.lastActionType === 'raise') && s.lastActionAmount > 0) {
         const seatId = mpSeatElIdFor(s.lastActionUid);
-        if (seatId) animateCoinToPot(seatId, s.lastActionAmount);
+        const totalThisStreet = (s.bets && s.bets[s.lastActionUid]) || s.lastActionAmount;
+        if (seatId) animateBetToMarker(seatId, totalThisStreet);
       }
     }
     _mpPrevActionSeq = s.lastActionSeq;
@@ -4955,7 +5173,7 @@ function renderMPState(s, players) {
       const amt = parseInt(bets[uid]) || 0;
       if (amt <= 0) return;
       const seatId = mpSeatElIdFor(uid);
-      if (seatId) animateCoinToPot(seatId, amt);
+      if (seatId) animateBetToMarker(seatId, amt);
     });
   }
 
@@ -5055,11 +5273,13 @@ function renderMPState(s, players) {
   }
   _mpPrevCommunityLen = community.length;
 
-  // Pot
-  document.getElementById('pot-label').textContent = fmtCompact(s.pot || 0);
+  // Pot — shows mpDisplayedPot, not s.pot directly, so the number only
+  // catches up once bets actually sweep into the pot rather than the
+  // instant someone places a bet (see the phase-change sweep hook above).
+  document.getElementById('pot-label').textContent = fmtCompact(mpDisplayedPot);
   const potIconEl = document.getElementById('pot-icon');
   if (potIconEl) {
-    const src = potPileImage(s.pot || 0);
+    const src = potPileImage(mpDisplayedPot);
     potIconEl.style.visibility = src ? 'visible' : 'hidden';
     if (src) potIconEl.src = src;
   }
