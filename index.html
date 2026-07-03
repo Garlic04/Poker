@@ -94,7 +94,7 @@
     display: none;
     flex-direction: column;
     width: 230px;
-    height: 860px;
+    height: 1020px;
     margin-left: 14px;
     background: #1e3d10;
     border: 3px solid #8B5E1A;
@@ -167,8 +167,8 @@
   }
 
   #game-container {
-    width: 620px;
-    height: 860px;
+    width: 740px;
+    height: 1020px;
     position: relative;
     background: #2d5a1b;
     border: 8px solid #8B5E1A;
@@ -299,13 +299,21 @@
     box-shadow: 0 0 12px #ff664488;
   }
 
-  /* Seats — ellipse rx=218 ry=228 centre 310,356 */
-  #seat-player { position: absolute; left: 310px; top: 584px; transform: translate(-50%, -50%); }
-  #seat-0 { position: absolute; left: 310px; top: 128px; transform: translate(-50%, -50%); }
-  #seat-1 { position: absolute; left: 103px; top: 286px; transform: translate(-50%, -50%); }
-  #seat-2 { position: absolute; left: 103px; top: 426px; transform: translate(-50%, -50%); }
-  #seat-3 { position: absolute; left: 517px; top: 286px; transform: translate(-50%, -50%); }
-  #seat-4 { position: absolute; left: 517px; top: 426px; transform: translate(-50%, -50%); }
+  /* Seats — positions hand-tuned for a 660x960 table, verified collision-free against pot/community/status-bar */
+  #seat-player { position: absolute; left: 370px; top: 730px; transform: translate(-50%, -50%); }
+  #seat-0 { position: absolute; left: 370px; top: 80px; transform: translate(-50%, -50%); }
+  #seat-1 { position: absolute; left: 95px; top: 300px; transform: translate(-50%, -50%); }
+  #seat-2 { position: absolute; left: 95px; top: 560px; transform: translate(-50%, -50%); }
+  #seat-3 { position: absolute; left: 645px; top: 300px; transform: translate(-50%, -50%); }
+  #seat-4 { position: absolute; left: 645px; top: 560px; transform: translate(-50%, -50%); }
+  /* Corner seats -- only used by 8/10-player multiplayer tables, filling
+     the gaps between the 6 seats above. Positions verified collision-free
+     (including against the pot, each other, and the 6 core seats) before
+     being added, same process as the core layout. */
+  #seat-5 { position: absolute; left: 150px; top: 100px; transform: translate(-50%, -50%); }
+  #seat-6 { position: absolute; left: 590px; top: 100px; transform: translate(-50%, -50%); }
+  #seat-7 { position: absolute; left: 223px; top: 680px; transform: translate(-50%, -50%); }
+  #seat-8 { position: absolute; left: 517px; top: 680px; transform: translate(-50%, -50%); }
 
   .seat-name {
     font-size: 10px;
@@ -354,7 +362,7 @@
   /* Community cards */
   #community-area {
     position: absolute;
-    top: 316px;
+    top: 404px;
     left: 50%;
     transform: translateX(-50%);
     display: flex;
@@ -363,7 +371,7 @@
   }
 
   .community-card {
-    width: 46px; height: 61px;
+    width: 60px; height: 80px;
     border-radius: 5px;
     overflow: hidden;
     box-shadow: 2px 2px 6px rgba(0,0,0,0.4);
@@ -372,7 +380,7 @@
   /* Pot area */
   #pot-area {
     position: absolute;
-    top: 196px;
+    top: 257px;
     left: 50%;
     transform: translateX(-50%);
     display: flex;
@@ -382,7 +390,7 @@
     z-index: 10;
   }
   #pot-icon {
-    width: 170px; height: 95px;
+    width: 200px; height: 112px;
     margin: 0 auto 2px;
     object-fit: contain;
     object-position: bottom center;
@@ -433,19 +441,27 @@
     border-radius: 3px;
     text-shadow: 1px 1px 2px #000;
   }
-  /* Positioned partway between each seat and the table centre (310,356) */
-  #bet-marker-player { left: 310px; top: 465px; }
-  #bet-marker-0      { left: 310px; top: 168px; }
-  #bet-marker-1      { left: 175px; top: 271px; }
-  #bet-marker-2      { left: 175px; top: 362px; }
-  #bet-marker-3      { left: 445px; top: 271px; }
-  #bet-marker-4      { left: 445px; top: 362px; }
+  /* Positions set dynamically by positionBetMarkers() in JS, computed live
+     as a point on the actual straight line from each seat's avatar to the
+     pot's actual position (same scale-corrected approach as the dealer/
+     blind badges) — static values here are only a harmless fallback for
+     the brief moment before first paint. */
+  #bet-marker-player { left: 370px; top: 596px; }
+  #bet-marker-0      { left: 370px; top: 187px; }
+  #bet-marker-1      { left: 216px; top: 321px; }
+  #bet-marker-2      { left: 200px; top: 560px; }
+  #bet-marker-3      { left: 568px; top: 313px; }
+  #bet-marker-4      { left: 540px; top: 560px; }
+  #bet-marker-5      { left: 238px; top: 199px; }
+  #bet-marker-6      { left: 537px; top: 159px; }
+  #bet-marker-7      { left: 285px; top: 540px; }
+  #bet-marker-8      { left: 476px; top: 587px; }
 
   /* ── Bottom HUD ── */
   #hud {
     position: absolute;
     bottom: 0; left: 0; right: 0;
-    height: 148px;
+    height: 180px;
     display: flex;
     z-index: 20;
     border-top: 3px solid #8B5E1A;
@@ -454,7 +470,7 @@
 
   /* Left panel — player hole cards, large */
   #hud-cards {
-    width: 160px;
+    width: 200px;
     flex-shrink: 0;
     display: flex;
     align-items: center;
@@ -464,7 +480,7 @@
   }
 
   .player-card {
-    width: 60px; height: 80px;
+    width: 80px; height: 107px;
     border-radius: 6px;
     overflow: hidden;
     box-shadow: 2px 3px 8px rgba(0,0,0,0.6);
@@ -656,7 +672,7 @@
   /* Status message */
   #status-bar {
     position: absolute;
-    top: 378px;
+    top: 494px;
     left: 0; right: 0;
     text-align: center;
     font-size: 11px;
@@ -673,15 +689,15 @@
     position: absolute;
     top: 10px;
     left: 12px;
-    font-size: 10px;
+    font-size: 15px;
     color: #aaa;
     z-index: 15;
     pointer-events: none;
     display: flex;
     align-items: center;
-    gap: 3px;
+    gap: 4px;
   }
-  #table-bankroll img { width: 12px; height: 11px; image-rendering: pixelated; }
+  #table-bankroll img { width: 17px; height: 16px; image-rendering: pixelated; }
   #table-bankroll span { color: #fff; }
   .seat.folded .avatar-frame { opacity: 0.4; }
   .seat.folded .seat-name { opacity: 0.4; }
@@ -1686,6 +1702,46 @@
     <div class="seat-cards-offset" id="cards-player"></div>
   </div>
 
+  <!-- Seats 5-8: only ever used by multiplayer 8/10-player tables. Content
+       is populated dynamically by setupMPSeats() the same way seats 0-4
+       are — singleplayer never references these IDs at all, since its
+       PLAYERS array is fixed at exactly 5 AI opponents. -->
+  <div class="seat" id="seat-5" style="display:none;">
+    <div class="seat-avatar-col">
+      <div class="seat-name" id="name-5"></div>
+      <div class="avatar-frame" id="avatar-5">🧑</div>
+      <div class="seat-chips"><span class="chip-spacer"></span><span id="chips-5">0</span><img class="chip-icon" src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABMAAAAQCAMAAAG0HYTGAAAABGdBTUEAALGOfPtRkwAAACBjSFJNAAB6JQAAgIMAAPn/AACA6AAAdTAAAOpgAAA6lwAAF2+XqZnUAAADAFBMVEUADAAACAAAAgAAAQAvOS8vNi8EIQAJGgBAVy8bNAATJQCp1GI6WAAlOQDF44xohSBjbQCVnFCGiSzO0XiipCBpZgCnoyOini3m5cN7dQC/umSpoUPAumG8t3DKv1lkVwCTiTuhjyLXvjzUuz3XxF/Kumnm1IDm2Zvm4MDApDDKrTTm2aHXvmLm0YLm04nm1pnm2KLRqSPmvTnm2Krjpwbmw1/mxGHmxnDm0Zjm16vm2bbmqBXWoBfmw23mxnfm0Z3WoCPmsDHmsT3mtknkv2nm2LrLlSnms03mtFS2hTDmsVTm0KvmxJAvLy////8AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAADGzNoNAAAAT3RSTlP///////////////////////////////////////////////////////////////////////////////////////////////////////8APVawswAAAL5JREFUKM+NjVc7A1EAREeid3GFqwWrrLq6DVZEdOb8/5/jYZV9NI/nmzMjQNgCha4IOYjb0b2GAFBMDIrHK49o+CZbRni+yE0pxjTDBuFmy+/tyymEQ5GOXKyZcqOsxt3DHoAcijT7ZkluG+QQ7gauXmcQzTjd6+xPWt44P51bPdiyiCHx7EMdgW3XbPtv2b/5HxvyRGNp3FVWX3/aaZ8djQ3658N29+V6ofP58eaK27e9eXL/vKhqz9T6y6MvvXNLK0dqGK4AAAAASUVORK5CYII=" alt="GP"></div>
+    </div>
+    <div class="seat-cards-offset" id="cards-5"></div>
+  </div>
+
+  <div class="seat" id="seat-6" style="display:none;">
+    <div class="seat-avatar-col">
+      <div class="seat-name" id="name-6"></div>
+      <div class="avatar-frame" id="avatar-6">🧑</div>
+      <div class="seat-chips"><span class="chip-spacer"></span><span id="chips-6">0</span><img class="chip-icon" src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABMAAAAQCAMAAAG0HYTGAAAABGdBTUEAALGOfPtRkwAAACBjSFJNAAB6JQAAgIMAAPn/AACA6AAAdTAAAOpgAAA6lwAAF2+XqZnUAAADAFBMVEUADAAACAAAAgAAAQAvOS8vNi8EIQAJGgBAVy8bNAATJQCp1GI6WAAlOQDF44xohSBjbQCVnFCGiSzO0XiipCBpZgCnoyOini3m5cN7dQC/umSpoUPAumG8t3DKv1lkVwCTiTuhjyLXvjzUuz3XxF/Kumnm1IDm2Zvm4MDApDDKrTTm2aHXvmLm0YLm04nm1pnm2KLRqSPmvTnm2Krjpwbmw1/mxGHmxnDm0Zjm16vm2bbmqBXWoBfmw23mxnfm0Z3WoCPmsDHmsT3mtknkv2nm2LrLlSnms03mtFS2hTDmsVTm0KvmxJAvLy////8AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAADGzNoNAAAAT3RSTlP///////////////////////////////////////////////////////////////////////////////////////////////////////8APVawswAAAL5JREFUKM+NjVc7A1EAREeid3GFqwWrrLq6DVZEdOb8/5/jYZV9NI/nmzMjQNgCha4IOYjb0b2GAFBMDIrHK49o+CZbRni+yE0pxjTDBuFmy+/tyymEQ5GOXKyZcqOsxt3DHoAcijT7ZkluG+QQ7gauXmcQzTjd6+xPWt44P51bPdiyiCHx7EMdgW3XbPtv2b/5HxvyRGNp3FVWX3/aaZ8djQ3658N29+V6ofP58eaK27e9eXL/vKhqz9T6y6MvvXNLK0dqGK4AAAAASUVORK5CYII=" alt="GP"></div>
+    </div>
+    <div class="seat-cards-offset" id="cards-6"></div>
+  </div>
+
+  <div class="seat" id="seat-7" style="display:none;">
+    <div class="seat-avatar-col">
+      <div class="seat-name" id="name-7"></div>
+      <div class="avatar-frame" id="avatar-7">🧑</div>
+      <div class="seat-chips"><span class="chip-spacer"></span><span id="chips-7">0</span><img class="chip-icon" src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABMAAAAQCAMAAAG0HYTGAAAABGdBTUEAALGOfPtRkwAAACBjSFJNAAB6JQAAgIMAAPn/AACA6AAAdTAAAOpgAAA6lwAAF2+XqZnUAAADAFBMVEUADAAACAAAAgAAAQAvOS8vNi8EIQAJGgBAVy8bNAATJQCp1GI6WAAlOQDF44xohSBjbQCVnFCGiSzO0XiipCBpZgCnoyOini3m5cN7dQC/umSpoUPAumG8t3DKv1lkVwCTiTuhjyLXvjzUuz3XxF/Kumnm1IDm2Zvm4MDApDDKrTTm2aHXvmLm0YLm04nm1pnm2KLRqSPmvTnm2Krjpwbmw1/mxGHmxnDm0Zjm16vm2bbmqBXWoBfmw23mxnfm0Z3WoCPmsDHmsT3mtknkv2nm2LrLlSnms03mtFS2hTDmsVTm0KvmxJAvLy////8AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAADGzNoNAAAAT3RSTlP///////////////////////////////////////////////////////////////////////////////////////////////////////8APVawswAAAL5JREFUKM+NjVc7A1EAREeid3GFqwWrrLq6DVZEdOb8/5/jYZV9NI/nmzMjQNgCha4IOYjb0b2GAFBMDIrHK49o+CZbRni+yE0pxjTDBuFmy+/tyymEQ5GOXKyZcqOsxt3DHoAcijT7ZkluG+QQ7gauXmcQzTjd6+xPWt44P51bPdiyiCHx7EMdgW3XbPtv2b/5HxvyRGNp3FVWX3/aaZ8djQ3658N29+V6ofP58eaK27e9eXL/vKhqz9T6y6MvvXNLK0dqGK4AAAAASUVORK5CYII=" alt="GP"></div>
+    </div>
+    <div class="seat-cards-offset" id="cards-7"></div>
+  </div>
+
+  <div class="seat" id="seat-8" style="display:none;">
+    <div class="seat-avatar-col">
+      <div class="seat-name" id="name-8"></div>
+      <div class="avatar-frame" id="avatar-8">🧑</div>
+      <div class="seat-chips"><span class="chip-spacer"></span><span id="chips-8">0</span><img class="chip-icon" src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABMAAAAQCAMAAAG0HYTGAAAABGdBTUEAALGOfPtRkwAAACBjSFJNAAB6JQAAgIMAAPn/AACA6AAAdTAAAOpgAAA6lwAAF2+XqZnUAAADAFBMVEUADAAACAAAAgAAAQAvOS8vNi8EIQAJGgBAVy8bNAATJQCp1GI6WAAlOQDF44xohSBjbQCVnFCGiSzO0XiipCBpZgCnoyOini3m5cN7dQC/umSpoUPAumG8t3DKv1lkVwCTiTuhjyLXvjzUuz3XxF/Kumnm1IDm2Zvm4MDApDDKrTTm2aHXvmLm0YLm04nm1pnm2KLRqSPmvTnm2Krjpwbmw1/mxGHmxnDm0Zjm16vm2bbmqBXWoBfmw23mxnfm0Z3WoCPmsDHmsT3mtknkv2nm2LrLlSnms03mtFS2hTDmsVTm0KvmxJAvLy////8AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAADGzNoNAAAAT3RSTlP///////////////////////////////////////////////////////////////////////////////////////////////////////8APVawswAAAL5JREFUKM+NjVc7A1EAREeid3GFqwWrrLq6DVZEdOb8/5/jYZV9NI/nmzMjQNgCha4IOYjb0b2GAFBMDIrHK49o+CZbRni+yE0pxjTDBuFmy+/tyymEQ5GOXKyZcqOsxt3DHoAcijT7ZkluG+QQ7gauXmcQzTjd6+xPWt44P51bPdiyiCHx7EMdgW3XbPtv2b/5HxvyRGNp3FVWX3/aaZ8djQ3658N29+V6ofP58eaK27e9eXL/vKhqz9T6y6MvvXNLK0dqGK4AAAAASUVORK5CYII=" alt="GP"></div>
+    </div>
+    <div class="seat-cards-offset" id="cards-8"></div>
+  </div>
+
   <!-- Pot -->
   <div id="pot-area">
     <img id="pot-icon" src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABMAAAAQCAMAAAG0HYTGAAAABGdBTUEAALGOfPtRkwAAACBjSFJNAAB6JQAAgIMAAPn/AACA6AAAdTAAAOpgAAA6lwAAF2+XqZnUAAADAFBMVEUADAAACAAAAgAAAQAvOS8vNi8EIQAJGgBAVy8bNAATJQCp1GI6WAAlOQDF44xohSBjbQCVnFCGiSzO0XiipCBpZgCnoyOini3m5cN7dQC/umSpoUPAumG8t3DKv1lkVwCTiTuhjyLXvjzUuz3XxF/Kumnm1IDm2Zvm4MDApDDKrTTm2aHXvmLm0YLm04nm1pnm2KLRqSPmvTnm2Krjpwbmw1/mxGHmxnDm0Zjm16vm2bbmqBXWoBfmw23mxnfm0Z3WoCPmsDHmsT3mtknkv2nm2LrLlSnms03mtFS2hTDmsVTm0KvmxJAvLy////8AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAADGzNoNAAAAT3RSTlP///////////////////////////////////////////////////////////////////////////////////////////////////////8APVawswAAAL5JREFUKM+NjVc7A1EAREeid3GFqwWrrLq6DVZEdOb8/5/jYZV9NI/nmzMjQNgCha4IOYjb0b2GAFBMDIrHK49o+CZbRni+yE0pxjTDBuFmy+/tyymEQ5GOXKyZcqOsxt3DHoAcijT7ZkluG+QQ7gauXmcQzTjd6+xPWt44P51bPdiyiCHx7EMdgW3XbPtv2b/5HxvyRGNp3FVWX3/aaZ8djQ3658N29+V6ofP58eaK27e9eXL/vKhqz9T6y6MvvXNLK0dqGK4AAAAASUVORK5CYII=" alt="GP">
@@ -1701,6 +1757,10 @@
   <div class="bet-marker" id="bet-marker-2"><img src="" alt=""><span></span></div>
   <div class="bet-marker" id="bet-marker-3"><img src="" alt=""><span></span></div>
   <div class="bet-marker" id="bet-marker-4"><img src="" alt=""><span></span></div>
+  <div class="bet-marker" id="bet-marker-5"><img src="" alt=""><span></span></div>
+  <div class="bet-marker" id="bet-marker-6"><img src="" alt=""><span></span></div>
+  <div class="bet-marker" id="bet-marker-7"><img src="" alt=""><span></span></div>
+  <div class="bet-marker" id="bet-marker-8"><img src="" alt=""><span></span></div>
   <div class="bet-marker" id="bet-marker-player"><img src="" alt=""><span></span></div>
 
   <!-- Community cards -->
@@ -2287,6 +2347,81 @@ function hideAllBetMarkers() {
   document.querySelectorAll('.bet-marker').forEach(m => m.classList.remove('visible'));
 }
 
+// Bet marker offsets: (dx, dy) in unscaled CSS px, measured from each
+// seat's avatar centre — primarily vertical so clearance from that seat's
+// own cards is guaranteed regardless of name/text width (cards sit beside
+// the avatar, widening the row, but never extend beyond the row's own
+// height), with a small horizontal nudge leaning toward the pot for feel.
+// Fraction of the way along the straight avatar->pot line each seat's
+// marker sits. Chosen per seat to clear that seat's own cards: DOM order
+// is always avatar-column then cards (never mirrored), so cards render to
+// the right of the avatar for every seat regardless of table side. That
+// means for left-side seats (1, 2) the cards sit between the avatar and
+// the pot — blocking the direct line unless the fraction is large enough
+// to get past them — while for right-side seats (3, 4) the cards sit on
+// the far side, away from the pot, so a small fraction is already clear.
+// Most seats sit a fraction of the way along the straight line from their
+// avatar to the pot ('line' mode). Seats 2 and 4 sit in a pocket too tight
+// for that — barely 40px of vertical clearance between the status bar and
+// their own seat box — so they use a fixed offset from their own avatar
+// instead ('offset' mode), same fix that pocket has needed from the start.
+const BET_MARKER_CONFIG = {
+  '0':      { mode: 'line', frac: 0.40 },
+  'player': { mode: 'line', frac: 0.35 },
+  '1':      { mode: 'line', frac: 0.44 },
+  '3':      { mode: 'line', frac: 0.28 },
+  '2':      { mode: 'offset', dx: 105, dy: 0 },
+  '4':      { mode: 'offset', dx: -105, dy: 0 },
+  '5':      { mode: 'line', frac: 0.40 },
+  '6':      { mode: 'line', frac: 0.24 },
+  '7':      { mode: 'line', frac: 0.42 },
+  '8':      { mode: 'line', frac: 0.28 },
+};
+
+// Positions every bet marker as a point on the actual straight line from
+// that seat's *current* avatar position to the pot's *current* position —
+// both measured live, same scale-corrected approach already proven to
+// work for the dealer/blind badges and the pot payout animation — rather
+// than guessed-at fixed coordinates, which have been wrong before.
+function positionBetMarkers() {
+  const containerEl = document.getElementById('game-container');
+  const potIconEl = document.getElementById('pot-icon');
+  if (!containerEl || !potIconEl) return;
+  const containerRect = containerEl.getBoundingClientRect();
+  const scale = containerRect.width / 740;
+  // Target the icon's own lower portion, not the whole pot-area container's
+  // centre — the pile image anchors to the bottom of its box
+  // (object-position: bottom center) and is invisible entirely at a small
+  // or zero pot, so the container's geometric centre sits in empty space
+  // above anything actually visible. Aiming near the bottom instead keeps
+  // the line pointed at whatever's really on screen regardless of pot size.
+  const potR = potIconEl.getBoundingClientRect();
+  const potX = (potR.left - containerRect.left + potR.width / 2) / scale;
+  const potY = (potR.top  - containerRect.top  + potR.height * 0.8) / scale;
+
+  Object.keys(BET_MARKER_CONFIG).forEach(key => {
+    const seatEl = document.getElementById(key === 'player' ? 'seat-player' : 'seat-' + key);
+    const marker = document.getElementById('bet-marker-' + key);
+    if (!seatEl || !marker) return;
+    const avatarEl = seatEl.querySelector('.avatar-frame');
+    if (!avatarEl) return;
+    const r = avatarEl.getBoundingClientRect();
+    const avX = (r.left - containerRect.left + r.width / 2)  / scale;
+    const avY = (r.top  - containerRect.top  + r.height / 2) / scale;
+    const cfg = BET_MARKER_CONFIG[key];
+    let x, y;
+    if (cfg.mode === 'offset') {
+      x = avX + cfg.dx;
+      y = avY + cfg.dy;
+    } else {
+      x = avX + cfg.frac * (potX - avX);
+      y = avY + cfg.frac * (potY - avY);
+    }
+    marker.style.left = x + 'px';
+    marker.style.top  = y + 'px';
+  });
+}
+
 // Animates a coin from the player's seat to their own bet-marker spot (not
 // all the way to the pot), then reveals/updates that marker with the
 // current amount once it lands.
@@ -2296,40 +2431,55 @@ function animateBetToMarker(fromSeatId, amount) {
   const fromEl = document.getElementById(fromSeatId);
   const markerEl = document.getElementById(betMarkerIdFor(fromSeatId));
   if (!fromEl || !markerEl) return;
-
-  const fromR = fromEl.querySelector('.avatar-frame')?.getBoundingClientRect()
-              || fromEl.getBoundingClientRect();
-  const toR = markerEl.getBoundingClientRect();
-  const sx = fromR.left + fromR.width / 2;
-  const sy = fromR.top + fromR.height / 2;
-  const ex = toR.left + toR.width / 2;
-  const ey = toR.top + toR.height / 2;
-
-  const img = document.createElement('img');
-  img.src = BET_PILE_SRC;
-  img.className = 'coin-fly bet';
-  img.style.left = sx + 'px';
-  img.style.top  = sy + 'px';
-  document.body.appendChild(img);
-  playBetDownSound();
   _pendingBetMarkerFlights++;
 
-  const duration = 400;
-  const start = performance.now();
-  function step(now) {
-    const t = Math.min((now - start) / duration, 1);
-    const e = t < 0.5 ? 2*t*t : -1+(4-2*t)*t;
-    img.style.left = (sx + (ex - sx) * e) + 'px';
-    img.style.top  = (sy + (ey - sy) * e) + 'px';
-    img.style.opacity = t > 0.8 ? String(1 - (t - 0.8) * 5) : '1';
-    if (t < 1) requestAnimationFrame(step);
-    else {
-      img.remove();
-      showBetMarker(fromSeatId, amount);
-      _pendingBetMarkerFlights--;
+  // Wait one frame before measuring anything. This call typically happens
+  // in the same tick as other DOM changes (cards being dealt, chip counts
+  // updating) that can shift a seat's layout — measuring immediately can
+  // catch it mid-shift. Waiting a frame lets the browser finish applying
+  // everything from this tick first, so both endpoints are measured from
+  // the same *settled* layout and the flight is a real straight line that
+  // actually ends where the marker actually is, not a moving target.
+  requestAnimationFrame(() => {
+    positionBetMarkers();
+
+    // Launch from the avatar specifically — same reference point
+    // positionBetMarkers() used to place the marker, and the same pattern
+    // animatePotToWinner() uses for the pot-to-winner leg, so both halves
+    // of a bet's journey are visually anchored to the same point on the
+    // player.
+    const fromR = (fromEl.querySelector('.avatar-frame') || fromEl).getBoundingClientRect();
+    const toR = markerEl.getBoundingClientRect();
+    const sx = fromR.left + fromR.width / 2;
+    const sy = fromR.top + fromR.height / 2;
+    const ex = toR.left + toR.width / 2;
+    const ey = toR.top + toR.height / 2;
+
+    const img = document.createElement('img');
+    img.src = BET_PILE_SRC;
+    img.className = 'coin-fly bet';
+    img.style.left = sx + 'px';
+    img.style.top  = sy + 'px';
+    document.body.appendChild(img);
+    playBetDownSound();
+
+    const duration = 400;
+    const start = performance.now();
+    function step(now) {
+      const t = Math.min((now - start) / duration, 1);
+      const e = t < 0.5 ? 2*t*t : -1+(4-2*t)*t;
+      img.style.left = (sx + (ex - sx) * e) + 'px';
+      img.style.top  = (sy + (ey - sy) * e) + 'px';
+      img.style.opacity = t > 0.8 ? String(1 - (t - 0.8) * 5) : '1';
+      if (t < 1) requestAnimationFrame(step);
+      else {
+        img.remove();
+        showBetMarker(fromSeatId, amount);
+        _pendingBetMarkerFlights--;
+      }
     }
-  }
-  requestAnimationFrame(step);
+    requestAnimationFrame(step);
+  });
 }
 
 // Sweeps every currently-visible bet marker into the pot at once — called
@@ -2351,9 +2501,10 @@ function sweepBetMarkersToPot(onLanded) {
     if (onLanded) onLanded();
     return;
   }
-  const potR = potEl.getBoundingClientRect();
+  const potIconEl = document.getElementById('pot-icon') || potEl;
+  const potR = potIconEl.getBoundingClientRect();
   const ex = potR.left + potR.width / 2;
-  const ey = potR.top + potR.height / 2;
+  const ey = potR.top + potR.height * 0.8;
   let pending = markers.length;
   playPayIntoPotSound();
 
@@ -2509,11 +2660,17 @@ function initHand() {
   const bbPid = activePids[(di+2) % activePids.length];
   const bigBlind = state.minBet || 200;
   const smallBlind = bigBlind / 2;
+
+  // Render first so each seat's cards are already in the DOM (finalizing
+  // its actual width/layout) before any bet animation measures avatar
+  // positions — otherwise cards appearing a moment later shift the avatar
+  // sideways mid-flight, and the marker visibly snaps to its real position
+  // right as the coin lands.
+  renderAll();
+
   postBlind(sbPid, smallBlind);
   postBlind(bbPid, bigBlind);
   state.highBet = bigBlind;
-
-  renderAll();
 
   setTimeout(() => { if (currentTable === null) return; startPreflop(); }, 600);
 }
@@ -3341,7 +3498,7 @@ function renderAll() {
   updateControls();
   document.getElementById('status-bar').textContent = '';
   // Defer badge placement until after the browser has laid out the seats
-  requestAnimationFrame(renderDealerButton);
+  requestAnimationFrame(() => { renderDealerButton(); positionBetMarkers(); });
 }
 
 function renderCommunity() {
@@ -3442,6 +3599,12 @@ function renderDealerButton() {
   const bbPid = state.activePids[(di+2) % n];
 
   const containerRect = document.getElementById('game-container').getBoundingClientRect();
+  // getBoundingClientRect() reflects the container's current on-screen
+  // (scaled) size — badges are positioned with plain CSS left/top inside
+  // that same scaled container, so a raw pixel delta here would get scaled
+  // down a second time by the browser. Converting back to unscaled CSS
+  // units first keeps badges correctly anchored regardless of viewport size.
+  const scale = containerRect.width / 740;
 
   const addBadge = (pid, text, cls, offX, offY) => {
     const seatEl = pid === PLAYER_ID
@@ -3451,8 +3614,8 @@ function renderDealerButton() {
     const avatarEl = seatEl.querySelector('.avatar-frame');
     if (!avatarEl) return;
     const r = avatarEl.getBoundingClientRect();
-    const x = r.left - containerRect.left + r.width/2 + offX;
-    const y = r.top  - containerRect.top  + r.height/2 + offY;
+    const x = (r.left - containerRect.left + r.width/2)  / scale + offX;
+    const y = (r.top  - containerRect.top  + r.height/2) / scale + offY;
     const badge = document.createElement('div');
     badge.className = 'badge ' + cls;
     badge.textContent = text;
@@ -5077,7 +5240,12 @@ function setupMPSeats(players, cfg) {
   // Map: canonical seat index → visual seat element
   // Local player always goes to seat-player (bottom)
   // Others get assigned clockwise from seat-0 based on their offset from local player
-  const visualSeats = ['seat-0','seat-1','seat-2','seat-3','seat-4'];
+  // Corner seats (5-8) are appended after the original 5, not interleaved —
+  // this means any table with 6 or fewer total players behaves exactly as
+  // before (only ever reaches into the first 5 entries), and the corner
+  // seats only ever get used once a table actually has more players than
+  // the original 6 seats can hold.
+  const visualSeats = ['seat-0','seat-1','seat-2','seat-3','seat-4','seat-5','seat-6','seat-7','seat-8'];
 
   // Clear all seats
   document.querySelectorAll('.seat').forEach(s => {
@@ -5236,8 +5404,44 @@ function getPreFlopOrder(pids, bbIdx) {
 }
 
 // ── Render shared state for all clients
+// Dealer/SB/BB badges for multiplayer — singleplayer already has
+// renderDealerButton(); MP never had an equivalent at all, so no badges
+// ever showed up there. Same avatar-anchored, scale-corrected approach.
+function mpRenderDealerButton(s) {
+  const overlay = document.getElementById('badge-overlay');
+  if (!overlay) return;
+  overlay.innerHTML = '';
+  if (!s.dealerUid) return;
+
+  const containerRect = document.getElementById('game-container').getBoundingClientRect();
+  const scale = containerRect.width / 740;
+
+  const addBadge = (uid, text, cls, offX, offY) => {
+    if (!uid) return;
+    const seatId = mpSeatElIdFor(uid);
+    const seatEl = seatId && document.getElementById(seatId);
+    if (!seatEl) return;
+    const avatarEl = seatEl.querySelector('.avatar-frame');
+    if (!avatarEl) return;
+    const r = avatarEl.getBoundingClientRect();
+    const x = (r.left - containerRect.left + r.width/2)  / scale + offX;
+    const y = (r.top  - containerRect.top  + r.height/2) / scale + offY;
+    const badge = document.createElement('div');
+    badge.className = 'badge ' + cls;
+    badge.textContent = text;
+    badge.style.left = x + 'px';
+    badge.style.top  = y + 'px';
+    overlay.appendChild(badge);
+  };
+
+  addBadge(s.dealerUid, 'D',  'badge-d',  14, -14);
+  addBadge(s.sbUid,     'SB', 'badge-sb', 14,  14);
+  addBadge(s.bbUid,     'BB', 'badge-bb', 14,  14);
+}
+
 function renderMPState(s, players) {
   if (!s) return;
+  requestAnimationFrame(() => { mpRenderDealerButton(s); positionBetMarkers(); });
 
   // Any phase change means the previous betting round has definitively
   // closed (new street dealt, or the hand ended) — sweep whatever's still
@@ -5319,9 +5523,39 @@ function renderMPState(s, players) {
     document.getElementById('chips-player').textContent = (myAllin && _playerChips === 0) ? 'All In' : fmtCompact(_playerChips);
   }
 
+  // Deal opponent card-backs with a staggered "dealing" animation, once per
+  // hand. Opponent seats never showed card-backs at all before this — only
+  // community cards and your own hole cards were being rendered. This runs
+  // *before* the blinds animation below deliberately: adding these cards
+  // widens each seat's box, which shifts where its avatar actually sits.
+  // Measuring avatar position for a bet animation before that shift happens
+  // means the flight target goes stale the moment the cards appear a beat
+  // later, and the marker visibly snaps to its real spot — this ordering
+  // makes sure the seat's layout is already final before anything animates.
+  if (s.hand !== _mpPrevHandNum) {
+    _mpPrevHandNum = s.hand;
+    document.querySelectorAll('.seat-cards-offset').forEach(c => c.innerHTML = '');
+    const activePidsForDeal = Array.isArray(s.activePids) ? s.activePids : Object.values(s.activePids || {});
+    let dealIdx = 0;
+    activePidsForDeal.forEach(uid => {
+      if (uid === mpMyUid) return; // own cards rendered by renderMPMyCards
+      const seatEl = document.querySelector('.seat[data-mp-uid="' + uid + '"]');
+      const container = seatEl && seatEl.querySelector('.seat-cards-offset');
+      if (!container) return;
+      for (let c = 0; c < 2; c++) {
+        const div = document.createElement('div');
+        div.className = 'seat-card card-deal-in';
+        div.innerHTML = cardBackTag('micro');
+        div.style.animationDelay = (dealIdx * 90) + 'ms';
+        container.appendChild(div);
+        dealIdx++;
+      }
+    });
+  }
+
   // Blinds are posted directly when a hand is dealt (never go through
   // mpProcessAction), so they need their own one-time animation, keyed off
-  // the same "new hand" detection used for dealing card-backs below.
+  // the same "new hand" detection used for dealing card-backs above.
   if (s.phase === 'preflop' && s.hand !== _mpPrevBlindsHand) {
     _mpPrevBlindsHand = s.hand;
     const bets = s.bets || {};
@@ -5377,30 +5611,6 @@ function renderMPState(s, players) {
       playerWentAllin, everyoneFolded: !!s.wonByFold,
       tableIdx: mpTierIdx,
     }, mpMyUid);
-  }
-
-  // Deal opponent card-backs with a staggered "dealing" animation, once per
-  // hand. Opponent seats never showed card-backs at all before this — only
-  // community cards and your own hole cards were being rendered.
-  if (s.hand !== _mpPrevHandNum) {
-    _mpPrevHandNum = s.hand;
-    document.querySelectorAll('.seat-cards-offset').forEach(c => c.innerHTML = '');
-    const activePids = Array.isArray(s.activePids) ? s.activePids : Object.values(s.activePids || {});
-    let dealIdx = 0;
-    activePids.forEach(uid => {
-      if (uid === mpMyUid) return; // own cards rendered by renderMPMyCards
-      const seatEl = document.querySelector('.seat[data-mp-uid="' + uid + '"]');
-      const container = seatEl && seatEl.querySelector('.seat-cards-offset');
-      if (!container) return;
-      for (let c = 0; c < 2; c++) {
-        const div = document.createElement('div');
-        div.className = 'seat-card card-deal-in';
-        div.innerHTML = cardBackTag('micro');
-        div.style.animationDelay = (dealIdx * 90) + 'ms';
-        container.appendChild(div);
-        dealIdx++;
-      }
-    });
   }
 
   // Community cards — Firebase may return as object
@@ -5982,7 +6192,7 @@ function buildDeck() {
 // RESPONSIVE SCALING
 // ============================================================
 function scaleGame() {
-  const W = 620, H = 860;
+  const W = 740, H = 1020;
   const scaleX = window.innerWidth  / W;
   const scaleY = window.innerHeight / H;
   const scale  = Math.min(scaleX, scaleY, 1); // never scale up beyond 1
@@ -5999,6 +6209,7 @@ function scaleGame() {
     logDialog.style.marginTop    = `${(H * scale - H) / 2}px`;
     logDialog.style.marginBottom = `${(H * scale - H) / 2}px`;
   }
+  requestAnimationFrame(positionBetMarkers);
 }
 window.addEventListener('resize', scaleGame);
 document.addEventListener('click', (e) => {
